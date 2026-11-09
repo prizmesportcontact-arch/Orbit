@@ -428,6 +428,54 @@ function evHTML(e) {
   return `<div class="item"><div class="bar gbar"></div><div class="bd"><div class="tt">${esc(e.title)}</div><div class="mm"><span class="tag">${e.allDay ? 'Journée' : fmtTime(e.start) + (e.end ? ' – ' + fmtTime(e.end) : '')}</span>${e.location ? `<span>${esc(e.location)}</span>` : ''}<span class="tag ok">Google</span></div></div></div>`;
 }
 
+/* ---------- « Maintenant » : où j'en suis dans ma journée ---------- */
+function daySchedule(d) {
+  const cours = coursOn(d).filter(c => !c.canceled).map(c => ({ kind: 'cours', title: prettySubj(c.subject) || 'Cours', room: c.room, start: new Date(c.starts_at), end: new Date(c.ends_at) }));
+  const ev = eventsOn(d).filter(e => !e.allDay).map(e => ({ kind: 'event', title: e.title, room: e.location, start: new Date(e.start), end: new Date(e.end || e.start) }));
+  return [...cours, ...ev].sort((a, b) => a.start - b.start);
+}
+const mins = ms => Math.max(0, Math.round(ms / 60000));
+function dur(ms) { const m = mins(ms); if (m < 60) return `${m} min`; const h = Math.floor(m / 60), r = m % 60; return r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`; }
+function nowCardHTML() {
+  const now = new Date(), today = startOfDay(now);
+  const S = daySchedule(today), cours = S.filter(x => x.kind === 'cours');
+  const cur = S.find(x => x.start <= now && now < x.end);
+  const next = S.find(x => x.start > now);
+  const badge = x => x.kind === 'cours' ? subjBadge(x.title) : `<span class="sq" style="background:var(--blue)">${SVG('<rect x="3" y="4" width="18" height="17" rx="4"/><path d="M16 2v4M8 2v4M3 10h18"/>').replace('stroke="currentColor"', 'stroke="#100e0d"')}</span>`;
+  const where = x => [x.room && esc(x.room), `${fmtTime(x.start)} – ${fmtTime(x.end)}`].filter(Boolean).join(' · ');
+  // barre de la journée : un segment par cours
+  let bar = '';
+  if (cours.length) {
+    const doneN = cours.filter(c => c.end <= now).length;
+    bar = `<div class="dayBar" aria-label="${doneN} cours sur ${cours.length} terminés">${cours.map(c => {
+      const st = c.end <= now ? 'done' : (c.start <= now ? 'cur' : '');
+      const pct = st === 'cur' ? Math.round((now - c.start) / (c.end - c.start) * 100) : 0;
+      return `<i class="${st}" title="${esc(c.title)} ${fmtTime(c.start)}"${st === 'cur' ? ` style="--p:${pct}%"` : ''}></i>`;
+    }).join('')}</div>
+    <div class="dayBarTxt"><span>${doneN}/${cours.length} cours</span><span>${now < cours[cours.length - 1].end ? `fin des cours à ${fmtTime(cours[cours.length - 1].end)}` : 'cours finis'}</span></div>`;
+  }
+  let main;
+  if (cur) {
+    const pct = Math.round((now - cur.start) / (cur.end - cur.start) * 100);
+    main = `<div class="nowLbl"><span class="live"></span>En ce moment</div>
+      <div class="nowRow">${badge(cur)}<div class="nowTxt"><b>${esc(cur.title)}</b><span>${where(cur)}</span></div><div class="nowLeft"><b>${dur(cur.end - now)}</b><span>restantes</span></div></div>
+      <div class="prog"><i style="width:${pct}%"></i></div>`;
+  } else if (next && sameDay(next.start, now)) {
+    const inMs = next.start - now;
+    main = `<div class="nowLbl">${S.some(x => x.end <= now) ? 'Pause' : 'Prochain'} · ${inMs < 60e3 ? 'ça commence' : 'dans ' + dur(inMs)}</div>
+      <div class="nowRow">${badge(next)}<div class="nowTxt"><b>${esc(next.title)}</b><span>${where(next)}</span></div><div class="nowLeft"><b>${fmtTime(next.start)}</b><span>début</span></div></div>`;
+  } else {
+    // journée finie ou sans cours : prochain jour de cours
+    let nd = null;
+    for (let i = 1; i <= 7 && !nd; i++) { const d = addDays(today, i); const c = daySchedule(d).filter(x => x.kind === 'cours'); if (c.length) nd = { d, c }; }
+    main = `<div class="nowLbl">${cours.length ? 'Cours finis pour aujourd\'hui' : 'Pas de cours aujourd\'hui'}</div>
+      ${nd ? `<div class="nowRow">${badge(nd.c[0])}<div class="nowTxt"><b>${dayTitle(nd.d)[0]} : ${esc(nd.c[0].title)}</b><span>${nd.c.length} cours · de ${fmtTime(nd.c[0].start)} à ${fmtTime(nd.c[nd.c.length - 1].end)}${nd.c[0].room ? ' · ' + esc(nd.c[0].room) : ''}</span></div></div>` : `<div class="small muted" style="margin-top:4px">${server.pronote?.connected ? 'Aucun cours dans les 7 prochains jours.' : 'Connecte Pronote pour voir ton emploi du temps.'}</div>`}`;
+  }
+  const after = cur && next && sameDay(next.start, now) ? `<div class="nowNext">Ensuite · <b>${esc(next.title)}</b> à ${fmtTime(next.start)}${next.room ? ' · ' + esc(next.room) : ''}${next.start - cur.end > 5 * 60e3 ? ` <span class="muted">(pause de ${dur(next.start - cur.end)})</span>` : ''}</div>` : '';
+  return main + after + bar;
+}
+function updateNow() { const c = $('#nowCard'); if (c) c.innerHTML = nowCardHTML(); }
+
 function rToday() {
   const v = $('#v-aujourdhui'), today = startOfDay(new Date()), now = new Date();
   const A = active().sort(byDue);
@@ -465,7 +513,7 @@ function rToday() {
   const subjHTML = Object.entries(subjects).slice(0, 6).map(([k, L]) => { const n = Math.min(...L.map(t => daysLeft(t) ?? 99)); return `<div class="subj">${subjBadge(k, 'sq')}<span>${esc(k)} <small class="muted" style="font-weight:500">· ${L.length}</small></span><b>${n < 0 ? '!' : n === 0 ? 'Auj.' : n === 1 ? 'Dem.' : 'J-' + n}</b></div>`; }).join('');
   const tomorrowCours = coursOn(addDays(today, 1)).filter(c => !c.canceled);
   v.innerHTML = `<div class="today">
-    <div class="colA">${hero}
+    <div class="colA"><div class="card nowCard" id="nowCard">${nowCardHTML()}</div>${hero}
       <div><div class="h2">Ta journée</div><div class="tl">${rows.join('') || '<div class="empty">Journée tranquille. Rien d\'urgent ni de prévu.</div>'}</div></div>
       ${later.length ? `<div class="upchips">${later.map(t => `<span><i style="background:${t.kind === 'devoir' ? subjColor(t.subject) : 'var(--dim)'}"></i>${esc(t.title.length > 22 ? t.title.slice(0, 21) + '…' : t.title)} · J-${daysLeft(t)}</span>`).join('')}</div>` : ''}
     </div>
@@ -599,7 +647,9 @@ function snapshotCtx() {
     const tot = [...c, ...ev];
     return `${cap(fmtDay(d))} : ${tot.length ? tot.join(' ; ') : 'rien de prévu'}`;
   }).join('\n');
-  return `${todayCtx()}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
+  const nowS = daySchedule(new Date()), cur = nowS.find(x => x.start <= new Date() && new Date() < x.end), nx = nowS.find(x => x.start > new Date());
+  const pos = cur ? `En ce moment : ${cur.title} jusqu'à ${fmtTime(cur.end)}.` : nx ? `Prochain : ${nx.title} à ${fmtTime(nx.start)}.` : 'Plus de cours aujourd\'hui.';
+  return `${todayCtx()} ${pos}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
 }
 let asking = false;
 async function ask(q) {
@@ -838,7 +888,8 @@ function boot() {
   pull(!lastSince);
   setInterval(() => pull(), 60e3);
   setInterval(checkReminders, 30e3); setTimeout(checkReminders, 4000);
-  setInterval(() => { if (current === 'aujourdhui') rToday(); }, 60e3);
+  setInterval(() => { if (current === 'aujourdhui' && document.visibilityState === 'visible') updateNow(); }, 20e3);
+  setInterval(() => { if (current === 'aujourdhui' && document.visibilityState === 'visible' && !document.querySelector('#sheet.on')) rToday(); }, 5 * 60e3);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
   addEventListener('online', () => pull()); addEventListener('offline', () => setOnline(false));
 }

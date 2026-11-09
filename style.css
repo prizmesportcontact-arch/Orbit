@@ -220,8 +220,8 @@ a{color:var(--acc2)}
 .assist{background:var(--accSoft)}
 .assist form{display:flex;gap:8px;background:var(--bg);border-radius:16px;padding:4px 4px 4px 14px;margin-top:12px}
 .assist input{flex:1;min-width:0;background:none;border:0;outline:0;height:40px}
-.assist button{width:40px;height:40px;border-radius:13px;background:var(--acc);color:var(--accTxt);display:grid;place-items:center}
-.assist button svg{width:18px;height:18px}
+.assist form button{width:40px;height:40px;border-radius:13px;background:var(--acc);color:var(--accTxt);display:grid;place-items:center;flex:none}
+.assist form button svg{width:18px;height:18px}
 .upchips{display:none;gap:8px;flex-wrap:wrap}
 .upchips span{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:16px;padding:10px 12px;font-size:13px;font-weight:700}
 .upchips span i{width:8px;height:8px;border-radius:50%;background:var(--dim)}
@@ -272,6 +272,30 @@ details.fold[open] summary{margin-bottom:12px}
 a.btn{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
 .help{font-size:12.5px;color:var(--mut);line-height:1.55;margin-top:8px}
 .help ol{padding-left:18px;margin-top:4px}
+/* ---------- Maintenant ---------- */
+.nowCard{padding:18px 20px;display:flex;flex-direction:column;gap:12px;animation:pop .45s var(--ease) both}
+.nowLbl{font-size:12.5px;font-weight:800;color:var(--acc2);text-transform:uppercase;letter-spacing:.7px;display:flex;align-items:center;gap:8px}
+.live{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 0 color-mix(in srgb,var(--acc) 60%,transparent);animation:live 1.8s infinite}
+@keyframes live{70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.nowRow{display:flex;align-items:center;gap:14px}
+.nowRow .sq{width:46px;height:46px;border-radius:15px}
+.nowRow .sq svg{width:22px;height:22px}
+.nowTxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nowTxt b{font-size:19px;font-weight:800;letter-spacing:-.3px}
+.nowTxt span{font-size:13.5px;color:var(--mut)}
+.nowLeft{text-align:right;display:flex;flex-direction:column}
+.nowLeft b{font-family:var(--disp);font-size:24px;font-weight:800;letter-spacing:-.8px;line-height:1}
+.nowLeft span{font-size:11.5px;color:var(--mut);font-weight:600}
+.prog{height:8px;border-radius:9px;background:var(--card2);overflow:hidden}
+.prog i{display:block;height:100%;border-radius:9px;background:var(--acc);transition:width 1s var(--ease)}
+.nowNext{font-size:13.5px;color:var(--mut)}
+.nowNext b{color:var(--txt)}
+.dayBar{display:flex;gap:4px;margin-top:2px}
+.dayBar i{flex:1;height:6px;border-radius:6px;background:var(--card2);position:relative;overflow:hidden}
+.dayBar i.done{background:color-mix(in srgb,var(--acc) 55%,var(--card2))}
+.dayBar i.cur{background:var(--card2)}
+.dayBar i.cur:after{content:"";position:absolute;inset:0;width:var(--p);background:var(--acc);border-radius:6px}
+.dayBarTxt{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);font-weight:600}
 /* ---------- Mobile ---------- */
 .tabbar{display:none}
 .mobOnly{display:none}
@@ -300,6 +324,9 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
   .tl .when{width:44px;font-size:12px}
   .tl .row{gap:12px}
   .upchips{display:flex}
+  .nowCard{padding:16px}
+  .nowTxt b{font-size:17px}
+  .nowLeft b{font-size:21px}
   .dayHead b{font-size:26px}
   .gate h1{font-size:44px}
   .colB .subjCard,.colB .agendaCard{display:none}
