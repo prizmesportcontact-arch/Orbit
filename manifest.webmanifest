@@ -1,0 +1,16 @@
+{
+  "name": "Orbit — Organisation",
+  "short_name": "Orbit",
+  "description": "Tâches, rappels, devoirs Pronote, agenda et IA.",
+  "lang": "fr",
+  "start_url": "./#aujourdhui",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#100e0d",
+  "theme_color": "#100e0d",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
