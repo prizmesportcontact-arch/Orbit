@@ -27,7 +27,7 @@ const ICON = {
   send: SVG('<path d="M5 12h14M13 6l6 6-6 6"/>', 2.4),
   repeat: SVG('<path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
 };
-const TABS = [['aujourdhui', "Aujourd'hui"], ['taches', 'Tâches'], ['devoirs', 'Devoirs'], ['agenda', 'Agenda'], ['ia', 'IA']];
+const TABS = [['aujourdhui', "Aujourd'hui"], ['taches', 'Tâches'], ['devoirs', 'Devoirs'], ['agenda', 'Agenda'], ['ia', 'Assistant']];
 const ACCENTS = { corail: ['#ff6a47', '#ff8c70', '#3a221b'], ambre: ['#ffb23f', '#ffc56e', '#3a2c16'], rose: ['#ff4f8b', '#ff86ae', '#3a1b27'], menthe: ['#4fd1a5', '#7fe0bf', '#16332a'], bleu: ['#6f9bff', '#9ab9ff', '#1c2540'] };
 const REPEATS = { '': 'Jamais', daily: 'Tous les jours', weekdays: 'En semaine (lun-ven)', weekly: 'Chaque semaine', biweekly: 'Toutes les 2 semaines', monthly: 'Chaque mois' };
 
@@ -73,6 +73,27 @@ function dayTitle(d) {
 const SUBJ = { 'MATHEMATIQUES': 'Maths', 'FRANCAIS': 'Français', 'ANGLAIS LV1': 'Anglais', 'ANGLAIS LV2': 'Anglais', 'ALLEMAND LV1': 'Allemand', 'ALLEMAND LV2': 'Allemand', 'ESPAGNOL LV1': 'Espagnol', 'ESPAGNOL LV2': 'Espagnol', 'PHYSIQUE-CHIMIE': 'Physique-chimie', 'PHYSIQ.CHIMIE&MATHS': 'Physique-chimie & maths', 'HISTOIRE-GEOGRAPHIE': 'Histoire-géo', 'HISTOIRE & GEOGRAPHIE': 'Histoire-géo', 'ED.PHYSIQUE & SPORT.': 'EPS', 'EPS': 'EPS', 'PHILOSOPHIE': 'Philo', 'SCIENCES ECO.& SOCIAL.': 'SES', 'SC. ECONO.& SOCIALES': 'SES', 'SCIENCES VIE & TERRE': 'SVT', 'ENS. MORAL & CIVIQUE': 'EMC', 'ENSEIGN.SCIENTIFIQUE': 'Enseignement scientifique', 'IT-INNOVATION TECHNOLOGIQUE': 'Innovation techno', 'ENS.TECHNO. EN LV1': 'ETLV', 'NUMERIQUE SC.INFORM.': 'NSI' };
 function prettySubj(s) { if (!s) return null; const k = String(s).trim().toUpperCase(); if (SUBJ[k]) return SUBJ[k]; return k.toLowerCase().replace(/(^|[\s\-'.&(])([a-zà-ÿ])/g, (m, a, b) => a + b.toUpperCase()); }
 const COLORS = ['#ff6a47', '#ffb23f', '#6f9bff', '#4fd1a5', '#c58cff', '#ff8fb1', '#e8c48a', '#7fd3ff'];
+const SUBJ_ICONS = [
+  [/math|algèbre|géom/i, '<path d="M18 5V4H6l6 8-6 8h12v-1"/>'],
+  [/physique|chimie/i, '<path d="M9 3h6M10 3v6L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9V3"/><path d="M7.5 15h9"/>'],
+  [/svt|vie|terre|bio/i, '<path d="M11 20A7 7 0 0 1 4 13c0-6 6-9 16-9 0 10-3 16-9 16z"/><path d="M4 21c4-4 7-7 10-10"/>'],
+  [/français|littér|lettres/i, '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'],
+  [/philo/i, '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>'],
+  [/anglais|allemand|espagnol|italien|chinois|latin|grec|langue|etlv|lv\d/i, '<path d="M21 12a8 8 0 0 1-11.8 7L3 21l2-6.2A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>'],
+  [/histoire|géo|geo/i, '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'],
+  [/eps|sport/i, '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'],
+  [/ses|éco|eco|gestion/i, '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>'],
+  [/techno|innovation|nsi|info|numérique|si\b|ingénie/i, '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>'],
+  [/musique/i, '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'],
+  [/art|dessin|plast/i, '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="16" cy="10" r="1.2"/>'],
+  [/emc|moral|civique/i, '<path d="M12 3v18M6 7h12M6 7l-3 7a3.5 3.5 0 0 0 6 0zM18 7l-3 7a3.5 3.5 0 0 0 6 0z"/>'],
+  [/scientifique|science/i, '<circle cx="12" cy="12" r="2"/><path d="M12 2c3 3 3 17 0 20M12 2c-3 3-3 17 0 20M2 12c3-3 17-3 20 0M2 12c3 3 17 3 20 0"/>'],
+];
+function subjIcon(name, size = 18) {
+  const p = (SUBJ_ICONS.find(([re]) => re.test(name || '')) || [, '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/>'])[1];
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#100e0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+}
+const subjBadge = (name, cls = 'sq') => `<span class="${cls}" style="background:${subjColor(name)}" title="${esc(name || '')}">${subjIcon(name)}</span>`;
 function subjColor(name) { let h = 0; for (const c of String(name || '?')) h = (h * 31 + c.charCodeAt(0)) | 0; return COLORS[Math.abs(h) % COLORS.length]; }
 const decode = s => { const t = document.createElement('textarea'); t.innerHTML = String(s ?? ''); return t.value; };
 
@@ -236,18 +257,23 @@ async function aiJSON(opts) {
 }
 const todayCtx = () => { const d = new Date(); return `Nous sommes le ${fmtDay(d)} ${d.getFullYear()} (${ymd(d)}), il est ${fmtTime(d)}. Fuseau Europe/Paris.`; };
 
-async function parseQuick(text) {
-  if (server.flags?.ai) try {
-    const r = await aiJSON({ prompt: `${todayCtx()}
-Tu es le moteur de saisie rapide d'une appli d'organisation pour un lycéen français.
-Transforme la phrase en une tâche structurée. Une date sans année = la PROCHAINE occurrence (jamais dans le passé).
-« avant le X » = date limite X. « demain », « lundi prochain », « dans 3 jours » sont relatifs à aujourd'hui.
-Répétition : « tous les jours/soirs » = daily, « en semaine » = weekdays, « chaque lundi / toutes les semaines » = weekly (due = le prochain jour concerné), « toutes les 2 semaines » = biweekly, « chaque mois » = monthly, sinon null.
-Réponds UNIQUEMENT en JSON : {"title": "titre court et clair, majuscule au début, sans la date", "due": "YYYY-MM-DD" ou null, "time": "HH:MM" ou null, "kind": "tache" | "devoir" | "rdv", "subject": "matière si devoir, sinon null", "repeat": null | "daily" | "weekdays" | "weekly" | "biweekly" | "monthly", "note": null ou détail utile}
-Phrase : """${text}"""` });
-    if (r && r.title) return { ...r, ai: true };
-  } catch (e) { /* l'analyse locale prend le relais */ }
-  return { ...localParse(text), ai: false };
+/* Une seule entrée : Orbit comprend si tu ajoutes quelque chose ou si tu poses une question. */
+const AGENT_RULES = `Tu es l'assistant d'organisation intégré à l'appli « Orbit » d'un lycéen français. Tu tutoies, tu es concret et bref.
+Le message peut être :
+- un AJOUT (ex : « exposé à rendre vendredi », « sortir les poubelles chaque lundi », « rappelle-moi d'appeler le dentiste jeudi ») → intent "add" avec la ou les tâches ;
+- une QUESTION ou une demande de conseil (ex : « qu'est-ce que je fais ce soir ? », « organise ma semaine ») → intent "chat" ;
+- une demande de marquer quelque chose comme fait → intent "done" avec les id entre crochets.
+Dates : une date sans année = la PROCHAINE occurrence. « avant le X » = date limite X. Répétition : daily, weekdays, weekly, biweekly, monthly ou null.
+Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done","reply":"phrase courte à afficher","tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"]}`;
+function taskFrom(x, source) {
+  const t = { id: uid(), title: cap(String(x.title || '').trim()) || 'Sans titre', due: x.due || null, time: x.time || null, kind: ['tache', 'devoir', 'rdv'].includes(x.kind) ? x.kind : 'tache', subject: x.subject || null, repeat: REPEATS[x.repeat] ? x.repeat || null : null, note: x.note || null, done: false, createdAt: new Date().toISOString(), source };
+  if (t.repeat && !t.due) t.due = ymd(new Date());
+  t.reminders = buildReminders(t);
+  return t;
+}
+async function agent(text, history = []) {
+  const r = await aiJSON({ system: AGENT_RULES + '\n\n' + snapshotCtx(), messages: [...history.slice(-10), { role: 'user', content: text }] });
+  return { intent: r.intent || (r.tasks?.length ? 'add' : 'chat'), reply: String(r.reply || ''), tasks: Array.isArray(r.tasks) ? r.tasks.filter(x => x && x.title) : [], done: Array.isArray(r.done) ? r.done : [] };
 }
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -277,30 +303,37 @@ function localParse(text) {
 }
 
 /* ---------- Saisie rapide ---------- */
-let pending = null;
+let pendingList = [];
 const GO_HTML = `${ICON.plus}<span>Ajouter</span>`;
 $('#capForm').addEventListener('submit', async e => {
   e.preventDefault();
   const text = $('#capIn').value.trim(); if (!text) return;
-  const go = $('#capGo'); go.disabled = true; go.innerHTML = '<div class="spin"></div><span>Analyse…</span>';
-  const p = await parseQuick(text);
-  go.disabled = false; go.innerHTML = GO_HTML;
-  pending = { id: uid(), title: p.title, due: p.due || null, time: p.time || null, kind: p.kind || 'tache', subject: p.subject || null, repeat: REPEATS[p.repeat] ? p.repeat || null : null, note: p.note || null, done: false, createdAt: new Date().toISOString(), source: 'rapide' };
-  pending.reminders = buildReminders(pending);
-  showPreview(p.ai);
+  const btn = $('#capGo'); btn.disabled = true; btn.innerHTML = '<div class="spin"></div><span>…</span>';
+  try {
+    if (server.flags?.ai) {
+      let a = null;
+      try { a = await withTimeout(agent(text, chat), 50000); } catch (err) { a = null; }
+      if (a && a.intent === 'chat') { $('#capIn').value = ''; toggleCapture(false); chat.push({ role: 'user', content: text }, { role: 'assistant', content: a.reply || "Je n'ai pas compris, reformule ?" }); go('ia'); return; }
+      if (a && a.intent === 'done' && a.done.length) { $('#capIn').value = ''; toggleCapture(false); for (const id of a.done) { const t = allItems().find(x => x.id === id); if (t) completeTask(t, true); } return; }
+      if (a && a.tasks.length) { pendingList = a.tasks.map(x => taskFrom(x, 'rapide')); showPreview(true); return; }
+    }
+    const p = localParse(text);
+    pendingList = [taskFrom({ ...p }, 'rapide')]; showPreview(false);
+  } finally { btn.disabled = false; btn.innerHTML = GO_HTML; }
 });
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, ko) => setTimeout(() => { const e = new Error('Trop long'); e.code = 'timeout'; ko(e); }, ms))]);
 function showPreview(isAI) {
-  const t = pending, pv = $('#preview'), rem = t.reminders;
-  pv.innerHTML = `<div class="t">${esc(t.title)}</div>
-    <div class="m">${t.due ? 'Échéance : ' + fmtDay(dueDate(t)) + (t.time ? ' à ' + t.time : '') : 'Pas de date détectée'}${isAI ? '' : ' · analyse hors IA'}</div>
-    <div class="chips">${t.repeat ? `<span class="chip acc">${REPEATS[t.repeat]}</span>` : ''}${t.kind === 'devoir' ? '<span class="chip acc">Devoir</span>' : t.kind === 'rdv' ? '<span class="chip acc">Rendez-vous</span>' : ''}${t.subject ? `<span class="chip">${esc(t.subject)}</span>` : ''}
-    ${rem.map(r => `<span class="chip">${r.label} · ${new Date(r.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(r.at)}</span>`).join('')}</div>
-    <div class="row"><button class="btn p" id="pvOk">Valider${rem.length ? ` · ${rem.length} rappel${rem.length > 1 ? 's' : ''}` : ''}</button><button class="btn" id="pvEdit">Modifier</button><button class="btn" id="pvNo">Annuler</button></div>`;
+  const L = pendingList, pv = $('#preview'), nRem = L.reduce((n, t) => n + t.reminders.length, 0);
+  pv.innerHTML = L.map(t => `<div class="pvItem"><div class="t">${esc(t.title)}</div>
+    <div class="m">${t.due ? fmtDay(dueDate(t)) + (t.time ? ' à ' + t.time : '') : 'Pas de date'}${t.repeat ? ' · ↻ ' + REPEATS[t.repeat] : ''}${t.subject ? ' · ' + esc(t.subject) : ''}</div>
+    <div class="m small">${t.reminders.length ? '🔔 ' + t.reminders.map(r => r.label).join(' · ') : 'Aucun rappel'}</div></div>`).join('')
+    + `${isAI ? '' : '<div class="m small" style="margin-top:6px">Analyse simple (IA indisponible) : vérifie la date.</div>'}
+    <div class="row"><button class="btn p" id="pvOk">${L.length > 1 ? `Ajouter les ${L.length}` : 'Ajouter'}${nRem ? ` · ${nRem} rappel${nRem > 1 ? 's' : ''}` : ''}</button>${L.length === 1 ? '<button class="btn" id="pvEdit">Modifier</button>' : ''}<button class="btn" id="pvNo">Annuler</button></div>`;
   pv.classList.add('show');
-  const close = () => { pending = null; pv.classList.remove('show'); $('#capIn').value = ''; toggleCapture(false); };
-  $('#pvOk').onclick = () => { const t = pending; close(); saveTask(t); toast('Ajouté', t.reminders.length ? `${t.reminders.length} rappels programmés (Discord)` : 'Tâche enregistrée'); };
-  $('#pvNo').onclick = () => { pending = null; pv.classList.remove('show'); toggleCapture(false); };
-  $('#pvEdit').onclick = () => { const t = pending; close(); openEditor(t, true); };
+  const close = () => { pendingList = []; pv.classList.remove('show'); $('#capIn').value = ''; toggleCapture(false); };
+  $('#pvOk').onclick = () => { const l = pendingList; close(); l.forEach(saveTask); toast(l.length > 1 ? `${l.length} tâches ajoutées` : 'Ajouté', nRem ? `${nRem} rappels programmés (Discord)` : 'Enregistré'); };
+  $('#pvNo').onclick = () => { pendingList = []; pv.classList.remove('show'); toggleCapture(false); };
+  const ed = $('#pvEdit'); if (ed) ed.onclick = () => { const t = pendingList[0]; close(); openEditor(t, true); };
 }
 function toggleCapture(force) {
   const on = typeof force === 'boolean' ? force : !document.body.classList.contains('capOpen');
@@ -335,6 +368,7 @@ function go(k, push = true) {
   current = k;
   document.querySelectorAll('#sidenav button,#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.k === k));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + k));
+  document.body.classList.toggle('onIA', k === 'ia');
   if (push) history.replaceState(null, '', '#' + k);
   movePills(); render();
 }
@@ -355,7 +389,7 @@ function setHeader() {
 /* ---------- Rendu ---------- */
 function itemHTML(t, opts = {}) {
   const n = nextReminder(t), cls = dueClass(t);
-  const lead = t.kind === 'devoir' && t.subject && !opts.noSq ? `<span class="sq" style="background:${subjColor(t.subject)}">${esc(t.subject.charAt(0))}</span>` : '';
+  const lead = t.kind === 'devoir' && t.subject && !opts.noSq ? subjBadge(t.subject) : '';
   return `<div class="item ${t.done ? 'done' : ''}" data-id="${esc(t.id)}">
     <button class="check" data-act="toggle" aria-label="${t.done ? 'Remettre à faire' : 'Terminer'}">${ICON.check}</button>${lead}
     <div class="bd" data-act="open"><div class="tt">${esc(t.title)}</div>
@@ -380,13 +414,14 @@ function render() {
   const b2 = $('[data-badge="devoirs"]'); if (b2) { b2.hidden = !hw; b2.textContent = hw; }
   const st = [[online, 'Synchro'], [server.flags?.ai, 'IA'], [server.flags?.ical, 'Google Agenda'], [server.pronote?.connected && !server.pronote?.last_error, 'Pronote']];
   $('#status').innerHTML = st.map(([on, l]) => `<span class="dot ${on ? 'on' : ''}" title="${l} : ${on ? 'actif' : 'inactif'}"></span>`).join('');
+  if (current === 'ia' && asking) return; // la conversation se met à jour toute seule à la réponse
   ({ aujourdhui: rToday, taches: rTasks, devoirs: rHomework, agenda: rAgenda, ia: rAI })[current]();
 }
 function coursOn(d) { return (server.cours || []).filter(c => sameDay(c.starts_at, d)); }
 function eventsOn(d) { const a = startOfDay(d), b = addDays(a, 1); return (server.gcal || []).filter(e => e.allDay ? new Date(e.start) < b && new Date(e.end) > a : sameDay(e.start, d)); }
 function coursHTML(c) {
   const s = prettySubj(c.subject) || 'Cours';
-  return `<div class="item cours ${c.canceled ? 'canceled' : ''}"><span class="sq" style="background:${subjColor(s)}">${esc(s.charAt(0))}</span><div class="bd"><div class="tt">${esc(s)}</div><div class="mm"><span class="tag cours">${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.room ? `<span>${esc(c.room)}</span>` : ''}${c.canceled ? `<span class="tag cancel">${esc(c.status || 'Annulé')}</span>` : c.status ? `<span class="tag soon">${esc(c.status)}</span>` : ''}</div></div></div>`;
+  return `<div class="item cours ${c.canceled ? 'canceled' : ''}">${subjBadge(s)}<div class="bd"><div class="tt">${esc(s)}</div><div class="mm"><span class="tag cours">${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.room ? `<span>${esc(c.room)}</span>` : ''}${c.canceled ? `<span class="tag cancel">${esc(c.status || 'Annulé')}</span>` : c.status ? `<span class="tag soon">${esc(c.status)}</span>` : ''}</div></div></div>`;
 }
 function evHTML(e) {
   return `<div class="item"><div class="bar gbar"></div><div class="bd"><div class="tt">${esc(e.title)}</div><div class="mm"><span class="tag">${e.allDay ? 'Journée' : fmtTime(e.start) + (e.end ? ' – ' + fmtTime(e.end) : '')}</span>${e.location ? `<span>${esc(e.location)}</span>` : ''}<span class="tag ok">Google</span></div></div></div>`;
@@ -426,7 +461,7 @@ function rToday() {
 
   const subjects = {};
   A.filter(t => t.kind === 'devoir').forEach(t => { (subjects[t.subject || 'Autre'] ||= []).push(t); });
-  const subjHTML = Object.entries(subjects).slice(0, 6).map(([k, L]) => { const n = Math.min(...L.map(t => daysLeft(t) ?? 99)); return `<div class="subj"><i style="background:${subjColor(k)}">${esc(k.charAt(0))}</i><span>${esc(k)} <small class="muted" style="font-weight:500">· ${L.length}</small></span><b>${n < 0 ? '!' : n === 0 ? 'Auj.' : n === 1 ? 'Dem.' : 'J-' + n}</b></div>`; }).join('');
+  const subjHTML = Object.entries(subjects).slice(0, 6).map(([k, L]) => { const n = Math.min(...L.map(t => daysLeft(t) ?? 99)); return `<div class="subj">${subjBadge(k, 'sq')}<span>${esc(k)} <small class="muted" style="font-weight:500">· ${L.length}</small></span><b>${n < 0 ? '!' : n === 0 ? 'Auj.' : n === 1 ? 'Dem.' : 'J-' + n}</b></div>`; }).join('');
   const tomorrowCours = coursOn(addDays(today, 1)).filter(c => !c.canceled);
   v.innerHTML = `<div class="today">
     <div class="colA">${hero}
@@ -485,7 +520,7 @@ function rHomework() {
     const [b, s] = k === 'late' ? ['En retard', ''] : k === 'none' ? ['Sans date', ''] : dayTitle(new Date(k + 'T12:00'));
     list += `<div class="dayHead ${k === 'late' ? 'late' : ''}"><b>${b}</b><span>${s}</span><span class="n">${g.length}</span></div><div class="list">${g.map(t => itemHTML(t, { noDue: k !== 'late' })).join('')}</div>`;
   }
-  v.innerHTML = `${subjects.length ? `<div class="chipsRow" style="margin-bottom:6px">${subjects.map(s => `<span><i style="background:${subjColor(s)}"></i>${esc(s)} · ${H.filter(t => (t.subject || 'Autre') === s).length}</span>`).join('')}</div>` : ''}
+  v.innerHTML = `${subjects.length ? `<div class="chipsRow" style="margin-bottom:6px">${subjects.map(s => `<span>${subjBadge(s, 'sq mini')}${esc(s)} · ${H.filter(t => (t.subject || 'Autre') === s).length}</span>`).join('')}</div>` : ''}
     ${list || '<div class="empty" style="margin-top:12px">Aucun devoir à faire 🎉</div>'}
     <div class="grid" style="margin-top:26px">${pronoteCardHTML()}
       <details class="fold"><summary>＋ Import manuel (copier-coller ou capture)</summary>
@@ -547,12 +582,12 @@ function rAgenda() {
 function rAI() {
   const v = $('#v-ia');
   if (!server.flags?.ai) { v.innerHTML = `<div class="chatwrap"><div class="msg a">Pour discuter avec moi, ajoute ta clé Gemini gratuite dans Réglages → Assistant IA.</div><button class="btn p" id="goSet" style="align-self:flex-start">Ouvrir les réglages</button></div>`; $('#goSet').onclick = openSettings; return; }
-  v.innerHTML = `<div class="chatwrap" id="chat">${chat.length ? '' : `<div class="msg a">Salut ! Je connais tes tâches, tes devoirs, tes cours et ton agenda. Demande-moi de planifier ta semaine, d'ajouter des trucs ou de t'aider à t'y mettre.</div>`}${chat.map(m => `<div class="msg ${m.role === 'user' ? 'u' : 'a'}">${esc(m.content)}</div>`).join('')}</div>
+  v.innerHTML = `<div class="chatwrap" id="chat">${chat.length ? '' : `<div class="msg a">Salut ! Écris-moi comme tu veux : « exposé à rendre vendredi » pour ajouter un truc, ou « qu'est-ce que je fais ce soir ? » pour un conseil. Je fais la différence tout seul.</div>`}${chat.map(m => `<div class="msg ${m.role === 'user' ? 'u' : 'a'}">${esc(m.content)}</div>`).join('')}${asking ? '<div class="msg a think"><span class="spin" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;border-color:var(--line);border-top-color:var(--acc)"></span> Je réfléchis…</div>' : ''}</div>
     <div class="sugg">${["Qu'est-ce que je dois faire ce soir ?", 'Organise ma semaine', 'Rappelle-moi de sortir les poubelles chaque lundi', "Qu'est-ce qui est en retard ?"].map(s => `<button>${s}</button>`).join('')}</div>
-    <form class="chatin" id="chatF"><input id="chatIn" placeholder="Demande à l'IA…" autocomplete="off" aria-label="Message"><button class="btn p" style="height:48px;border-radius:16px">Envoyer</button></form>`;
+    <form class="chatin" id="chatF"><input id="chatIn" placeholder="Ajoute un truc ou pose une question…" autocomplete="off" aria-label="Message" ${asking ? 'disabled' : ''}><button class="btn p" style="height:48px;border-radius:16px" ${asking ? 'disabled' : ''}>Envoyer</button></form>`;
   v.querySelectorAll('.sugg button').forEach(b => b.onclick = () => ask(b.textContent));
   $('#chatF').onsubmit = e => { e.preventDefault(); const q = $('#chatIn').value.trim(); if (q) ask(q); };
-  v.scrollTop = v.scrollHeight;
+  requestAnimationFrame(() => { v.scrollTop = v.scrollHeight; if (!asking && !matchMedia('(max-width:899px)').matches) $('#chatIn')?.focus(); });
 }
 function snapshotCtx() {
   const A = active().sort(byDue).slice(0, 60).map(t => `- [${t.id}] ${t.title}${t.kind === 'devoir' ? ' (devoir ' + (t.subject || '') + ')' : ''}${t.due ? ' — pour le ' + t.due + (t.time ? ' ' + t.time : '') : ''}${t.repeat ? ' — répétition ' + t.repeat : ''}`).join('\n');
@@ -562,28 +597,17 @@ function snapshotCtx() {
 }
 let asking = false;
 async function ask(q) {
-  if (asking) return; asking = true;
+  if (asking || !q) return; asking = true;
   chat.push({ role: 'user', content: q }); rAI();
-  const box = $('#chat'), a = el('div', 'msg a think', 'Je réfléchis…'); box.appendChild(a); $('#v-ia').scrollTop = 1e9;
-  const system = `Tu es l'assistant d'organisation intégré à l'appli « Orbit » d'un lycéen français. Tu tutoies, tu es concret, bref, motivant sans en faire trop. Texte simple, listes courtes si utile.
-Tu peux agir : ajouter une tâche (avec date, heure, répétition si connues) ou marquer une tâche faite par son id entre crochets. N'ajoute que si on te le demande clairement.
-Réponds UNIQUEMENT en JSON : {"reply":"ta réponse à afficher","actions":[{"type":"add","title":"…","due":"YYYY-MM-DD ou null","time":"HH:MM ou null","kind":"tache|devoir|rdv","subject":null,"repeat":null|"daily"|"weekdays"|"weekly"|"biweekly"|"monthly"},{"type":"done","id":"…"}]}
-${snapshotCtx()}`;
   try {
-    const r = await aiJSON({ system, messages: chat.slice(-12) });
-    let done = 0, added = 0;
-    for (const x of (Array.isArray(r.actions) ? r.actions : [])) {
-      if (x.type === 'add' && x.title) {
-        const t = { id: uid(), title: String(x.title), due: x.due || null, time: x.time || null, kind: ['tache', 'devoir', 'rdv'].includes(x.kind) ? x.kind : 'tache', subject: x.subject || null, repeat: REPEATS[x.repeat] ? x.repeat || null : null, done: false, createdAt: new Date().toISOString(), source: 'ia' };
-        if (t.repeat && !t.due) t.due = ymd(new Date());
-        t.reminders = buildReminders(t); saveTask(t); added++;
-      } else if (x.type === 'done') { const t = allItems().find(t => t.id === x.id); if (t) { completeTask(t, true); done++; } }
-    }
-    chat.push({ role: 'assistant', content: String(r.reply || 'C\'est fait.') + (added || done ? `\n\n✓ ${[added && added + ' ajout' + (added > 1 ? 's' : ''), done && done + ' terminé' + (done > 1 ? 's' : '')].filter(Boolean).join(', ')}` : '') });
-  } catch (e) {
-    chat.push({ role: 'assistant', content: aiErr(e) });
-  }
-  asking = false; if (current === 'ia') rAI();
+    const a = await withTimeout(agent(q, chat.slice(0, -1)), 55000);
+    const notes = [];
+    if (a.intent === 'add' && a.tasks.length) { const L = a.tasks.map(x => taskFrom(x, 'ia')); L.forEach(saveTask); notes.push(`✓ Ajouté : ${L.map(t => t.title + (t.due ? ' (' + dueLabel(t).toLowerCase() + ')' : '')).join(', ')}`); }
+    if (a.done.length) { let n = 0; for (const id of a.done) { const t = allItems().find(x => x.id === id); if (t) { completeTask(t, true); n++; } } if (n) notes.push(`✓ ${n} terminé${n > 1 ? 's' : ''}`); }
+    const head = a.intent === 'add' && notes.length ? '' : (a.reply || (notes.length ? '' : "Je n'ai pas compris, reformule ?"));
+    chat.push({ role: 'assistant', content: [head, ...notes].filter(Boolean).join('\n\n') });
+  } catch (e) { chat.push({ role: 'assistant', content: e.code === 'timeout' ? "L'IA met trop de temps à répondre. Réessaie dans un instant." : aiErr(e) }); }
+  finally { asking = false; if (current === 'ia') rAI(); }
 }
 function aiErr(e) {
   const c = String(e?.code || e?.message || '');
@@ -595,7 +619,7 @@ function aiErr(e) {
 }
 async function dailyBrief() {
   const o = $('#briefOut'); o.textContent = 'Je prépare ton plan…';
-  try { o.textContent = await ai({ prompt: `Tu es l'assistant d'organisation d'un lycéen français. Tutoie. Fais-lui un plan pour aujourd'hui en 5 lignes max : par quoi commencer, quoi caser ce soir en tenant compte de ses cours, un rappel important. Texte simple, pas de markdown.\n${snapshotCtx()}` }); }
+  try { o.textContent = await withTimeout(ai({ prompt: `Tu es l'assistant d'organisation d'un lycéen français. Tutoie. Fais-lui un plan pour aujourd'hui en 5 lignes max : par quoi commencer, quoi caser ce soir en tenant compte de ses cours, un rappel important. Texte simple, pas de markdown.\n${snapshotCtx()}` }), 55000); }
   catch (e) { o.textContent = aiErr(e); }
 }
 

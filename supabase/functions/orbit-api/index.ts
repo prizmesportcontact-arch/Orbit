@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
           up.ical_url = u || null;
           await db.from("orbit_kv").delete().eq("key", "gcal");
         }
-        if (up.gemini_key) { const t = await gemini(String(up.gemini_key), { prompt: "Réponds juste OK." }); if (!t.ok) return json({ ok: false, error: "Clé Gemini refusée : " + t.error }); }
+        if (up.gemini_key) { await db.from("orbit_kv").delete().eq("key", "gemini_model"); const t = await gemini(String(up.gemini_key), { prompt: "Réponds juste OK." }); if (!t.ok) return json({ ok: false, error: "Clé Gemini refusée : " + t.error }); }
         await db.from("orbit_pronote").update(up).eq("id", 1);
         if (up.ical_url) { const g = await calendar({ ...cfg, ical_url: up.ical_url }, true); if (g.error) return json({ ok: false, error: g.error }); }
         return json({ ok: true });
@@ -105,6 +105,24 @@ async function state(cfg: any, b: any) {
 }
 
 /* ---------- IA (Gemini) ---------- */
+const GAPI = "https://generativelanguage.googleapis.com/v1beta";
+// Google retire régulièrement des modèles : on cherche le plus récent « flash » disponible pour cette clé et on le mémorise.
+async function pickModels(key: string): Promise<string[]> {
+  const { data: kv } = await db.from("orbit_kv").select("value, updated_at").eq("key", "gemini_model").maybeSingle();
+  if (kv?.value?.models?.length && Date.now() - new Date(kv.updated_at).getTime() < 24 * 3600e3) return kv.value.models;
+  try {
+    const r = await fetch(`${GAPI}/models?pageSize=200`, { headers: { "x-goog-api-key": key }, signal: AbortSignal.timeout(10000) });
+    const j = await r.json();
+    const ver = (n: string) => +(n.match(/gemini-(\d+(?:\.\d+)?)/)?.[1] ?? 0);
+    const models = (j.models ?? [])
+      .filter((m: any) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
+      .map((m: any) => String(m.name).replace(/^models\//, ""))
+      .filter((n: string) => /^gemini-[\d.]+-flash$|^gemini-flash-latest$/.test(n))
+      .sort((a: string, b: string) => ver(b) - ver(a));
+    if (models.length) { await db.from("orbit_kv").upsert({ key: "gemini_model", value: { models: models.slice(0, 4) }, updated_at: new Date().toISOString() }); return models.slice(0, 4); }
+  } catch { /* liste indisponible : valeurs par défaut */ }
+  return ["gemini-flash-latest", "gemini-3.8-flash", "gemini-3.7-flash"];
+}
 async function gemini(key: string, b: any) {
   const parts: any[] = [];
   if (b.prompt) parts.push({ text: String(b.prompt).slice(0, 60000) });
@@ -115,20 +133,30 @@ async function gemini(key: string, b: any) {
   const body: any = { contents, generationConfig: { temperature: b.json ? 0.2 : 0.7, ...(b.json ? { responseMimeType: "application/json" } : {}) } };
   if (b.system) body.systemInstruction = { parts: [{ text: String(b.system).slice(0, 30000) }] };
   let last = "", limited = false;
-  // Les clés « AQ. » (nouveau format Google) ne marchent qu'avec les modèles récents : on essaie du plus récent au plus ancien.
-  for (const model of ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash"]) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body),
-    });
+  const tried = new Set<string>();
+  const queue = await pickModels(key);
+  const started = Date.now();
+  while (queue.length && Date.now() - started < 45000) {
+    const model = queue.shift()!; if (tried.has(model)) continue; tried.add(model);
+    let r: Response;
+    try {
+      r = await fetch(`${GAPI}/models/${model}:generateContent`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000),
+      });
+    } catch { last = "Gemini met trop de temps à répondre"; continue; }
     const j = await r.json().catch(() => ({}));
     if (r.ok) {
       const text = (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("");
-      return { ok: true, text };
+      if (tried.size > 1) await db.from("orbit_kv").upsert({ key: "gemini_model", value: { models: [model] }, updated_at: new Date().toISOString() });
+      return { ok: true, text, model };
     }
     last = j.error?.message ?? `HTTP ${r.status}`;
+    const hint = last.match(/use models\/([\w.-]+)/i)?.[1];
+    if (hint && !tried.has(hint)) queue.unshift(hint);
     if (r.status === 429) { limited = true; continue; }
-    if (/API key|API_KEY|UNAUTHENTICATED|ACCESS_TOKEN/i.test(last)) last = "Clé refusée par Google (" + last + ")";
+    if (/API key not valid|API_KEY_INVALID/i.test(last)) { last = "Clé refusée par Google (" + last + ")"; break; }
   }
+  await db.from("orbit_kv").delete().eq("key", "gemini_model");
   return { ok: false, error: limited ? "rate_limited" : last.slice(0, 200) };
 }
 
