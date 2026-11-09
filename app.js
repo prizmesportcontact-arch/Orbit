@@ -584,7 +584,7 @@ function rAI() {
   const v = $('#v-ia');
   if (!server.flags?.ai) { v.innerHTML = `<div class="chatwrap"><div class="msg a">Pour discuter avec moi, ajoute une clé IA gratuite dans Réglages (Groq, 1 minute).</div><button class="btn p" id="goSet" style="align-self:flex-start">Ouvrir les réglages</button></div>`; $('#goSet').onclick = openSettings; return; }
   v.innerHTML = `<div class="chatwrap" id="chat">${chat.length ? '' : `<div class="msg a">Salut ! Écris-moi comme tu veux : « exposé à rendre vendredi » pour ajouter un truc, ou « qu'est-ce que je fais ce soir ? » pour un conseil. Je fais la différence tout seul.</div>`}${chat.map(m => `<div class="msg ${m.role === 'user' ? 'u' : 'a'}">${esc(m.content)}</div>`).join('')}${asking ? '<div class="msg a think"><span class="spin" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;border-color:var(--line);border-top-color:var(--acc)"></span> Je réfléchis…</div>' : ''}</div>
-    <div class="sugg">${["Qu'est-ce que je dois faire ce soir ?", 'Organise ma semaine', 'Rappelle-moi de sortir les poubelles chaque lundi', "Qu'est-ce qui est en retard ?"].map(s => `<button>${s}</button>`).join('')}</div>
+    <div class="sugg" ${chat.length ? 'hidden' : ''}>${["Qu'est-ce que je dois faire ce soir ?", 'Organise ma semaine', 'Rappelle-moi de sortir les poubelles chaque lundi', "Qu'est-ce qui est en retard ?"].map(s => `<button>${s}</button>`).join('')}</div>
     <form class="chatin" id="chatF"><input id="chatIn" placeholder="Ajoute un truc ou pose une question…" autocomplete="off" aria-label="Message" ${asking ? 'disabled' : ''}><button class="btn p" style="height:48px;border-radius:16px" ${asking ? 'disabled' : ''}>Envoyer</button></form>`;
   v.querySelectorAll('.sugg button').forEach(b => b.onclick = () => ask(b.textContent));
   $('#chatF').onsubmit = e => { e.preventDefault(); const q = $('#chatIn').value.trim(); if (q) ask(q); };
@@ -658,8 +658,8 @@ function openEditor(t, isNew = false) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><label class="l" for="eK">Type</label><select class="inp" id="eK"><option value="tache">Tâche</option><option value="devoir">Devoir</option><option value="rdv">Rendez-vous</option></select></div><div><label class="l" for="eR">Répéter</label><select class="inp" id="eR">${Object.entries(REPEATS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div></div>
     <label class="l" for="eS">Matière</label><input class="inp" id="eS" value="${esc(t.subject || '')}" placeholder="—">
     <label class="l" for="eN">Note</label><textarea class="inp" id="eN" rows="2">${esc(t.note || '')}</textarea>
-    <label class="l">Rappels Discord</label><div class="chips">${(t.reminders || []).map(r => `<span class="chip ${r.fired ? '' : 'acc'}">${r.label} · ${new Date(r.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(r.at)}</span>`).join('') || '<span class="chip">Aucun (ajoute une date)</span>'}</div>
-    <div class="acts"><button class="btn p" id="eSave">Enregistrer</button>${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}${isNew ? '' : '<button class="btn" id="eDel" style="color:var(--bad)">Supprimer</button>'}<button class="btn" id="eX">Fermer</button></div>`;
+    <label class="l">Rappels Discord</label><div class="chips">${(t.reminders || []).map(r => `<span class="chip ${r.fired ? '' : 'acc'}">${r.label} · ${new Date(r.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(r.at)}</span>`).join('') || `<span class="chip">${t.due ? (dueDate(t) < new Date() ? 'Date passée : plus de rappel' : 'Plus de rappel prévu') : 'Aucun (ajoute une date)'}</span>`}</div>
+    <div class="acts"><button class="btn p" id="eSave">Enregistrer</button>${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}${isNew ? '' : '<button class="btn" id="eDel" style="color:#ff6b6b">Supprimer</button>'}<button class="btn" id="eX">Fermer</button></div>`;
   $('#eK').value = t.kind || 'tache'; $('#eR').value = t.repeat || '';
   $('#eSave').onclick = () => {
     const nt = { ...t, title: $('#eT').value.trim() || t.title, due: $('#eD').value || null, time: $('#eH').value || null, kind: $('#eK').value, repeat: $('#eR').value || null, subject: $('#eS').value.trim() || null, note: $('#eN').value.trim() || null };
@@ -706,7 +706,7 @@ function openSettings() {
   <label class="l">Cet appareil</label>
   <div class="opt"><div><b>Ouvrir Orbit sur un autre appareil</b><p>Copie ce lien et ouvre-le sur ton iPhone ou ton PC : il contient ton code d'accès, garde-le pour toi.</p></div><button class="btn sm" id="sLink">Copier</button></div>
   <div class="opt"><div><b>Installer comme une app</b><p>iPhone : Safari → Partager → « Sur l'écran d'accueil ». PC : Edge/Chrome → icône d'installation dans la barre d'adresse.</p></div></div>
-  <div class="opt"><div><b>Se déconnecter de cet appareil</b><p>Efface le code et les données gardées ici (rien n'est supprimé sur le serveur).</p></div><button class="btn sm" id="sOut" style="color:var(--bad)">Déconnecter</button></div>
+  <div class="opt"><div><b>Se déconnecter de cet appareil</b><p>Efface le code et les données gardées ici (rien n'est supprimé sur le serveur).</p></div><button class="btn sm" id="sOut" style="color:#ff6b6b">Déconnecter</button></div>
   <div class="acts"><button class="btn" id="eX">Fermer</button></div>`;
   s.querySelectorAll('.sw').forEach(b => b.onclick = () => { settings.accent = b.dataset.a; saveSettings(); s.querySelectorAll('.sw').forEach(x => x.classList.toggle('on', x === b)); });
   segPill('#iseg');
