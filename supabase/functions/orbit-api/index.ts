@@ -116,8 +116,8 @@ async function gemini(key: string, b: any) {
   if (b.system) body.systemInstruction = { parts: [{ text: String(b.system).slice(0, 30000) }] };
   let last = "";
   for (const model of ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body),
     });
     const j = await r.json().catch(() => ({}));
     if (r.ok) {
@@ -125,7 +125,7 @@ async function gemini(key: string, b: any) {
       return { ok: true, text };
     }
     last = j.error?.message ?? `HTTP ${r.status}`;
-    if (r.status === 400 && /API key/i.test(last)) break;
+    if (/API key|API_KEY/i.test(last)) { last = "Clé refusée par Google (" + last + ")"; break; }
     if (r.status === 429) return { ok: false, error: "rate_limited" };
   }
   return { ok: false, error: last.slice(0, 200) };
