@@ -263,8 +263,9 @@ Le message peut être :
 - un AJOUT (ex : « exposé à rendre vendredi », « sortir les poubelles chaque lundi », « rappelle-moi d'appeler le dentiste jeudi ») → intent "add" avec la ou les tâches ;
 - une QUESTION ou une demande de conseil (ex : « qu'est-ce que je fais ce soir ? », « organise ma semaine ») → intent "chat" ;
 - une demande de marquer quelque chose comme fait → intent "done" avec les id entre crochets.
+Pour "chat", "reply" est une VRAIE réponse complète et utile, pas une phrase d'introduction : par exemple pour « organise ma semaine », donne le plan jour par jour (lundi, mardi…) en t'appuyant sur ses cours, devoirs, tâches et agenda ci-dessous, avec des créneaux concrets (ex : « 17h30-18h15 : exo de maths ») et les priorités. Utilise des retours à la ligne et des tirets « - » pour que ce soit lisible sur téléphone. Pas de markdown (pas de **, pas de #). Pour "add" et "done", "reply" est une phrase courte.
 Dates : une date sans année = la PROCHAINE occurrence. « avant le X » = date limite X. Répétition : daily, weekdays, weekly, biweekly, monthly ou null.
-Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done","reply":"phrase courte à afficher","tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"]}`;
+Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done","reply":"ta réponse","tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"]}`;
 function taskFrom(x, source) {
   const t = { id: uid(), title: cap(String(x.title || '').trim()) || 'Sans titre', due: x.due || null, time: x.time || null, kind: ['tache', 'devoir', 'rdv'].includes(x.kind) ? x.kind : 'tache', subject: x.subject || null, repeat: REPEATS[x.repeat] ? x.repeat || null : null, note: x.note || null, done: false, createdAt: new Date().toISOString(), source };
   if (t.repeat && !t.due) t.due = ymd(new Date());
@@ -591,9 +592,14 @@ function rAI() {
 }
 function snapshotCtx() {
   const A = active().sort(byDue).slice(0, 60).map(t => `- [${t.id}] ${t.title}${t.kind === 'devoir' ? ' (devoir ' + (t.subject || '') + ')' : ''}${t.due ? ' — pour le ' + t.due + (t.time ? ' ' + t.time : '') : ''}${t.repeat ? ' — répétition ' + t.repeat : ''}`).join('\n');
-  const E = (server.gcal || []).filter(e => new Date(e.end || e.start) >= new Date()).slice(0, 30).map(e => `- ${e.title} — ${new Date(e.start).toLocaleString('fr-FR')}`).join('\n');
-  const C = [0, 1].map(i => { const d = addDays(new Date(), i); const c = coursOn(d).filter(c => !c.canceled); return c.length ? `${i ? 'Demain' : "Aujourd'hui"} : ${c.map(x => `${fmtTime(x.starts_at)}-${fmtTime(x.ends_at)} ${prettySubj(x.subject)}`).join(', ')}` : ''; }).filter(Boolean).join('\n');
-  return `${todayCtx()}\nTÂCHES ET DEVOIRS ACTIFS :\n${A || '(aucun)'}\n\nCOURS :\n${C || '(aucun ou inconnu)'}\n\nAGENDA GOOGLE À VENIR :\n${E || '(rien ou non relié)'}`;
+  const days = Array.from({ length: 8 }, (_, i) => addDays(startOfDay(new Date()), i));
+  const W = days.map(d => {
+    const c = coursOn(d).filter(c => !c.canceled).map(x => `${fmtTime(x.starts_at)}-${fmtTime(x.ends_at)} cours de ${prettySubj(x.subject)}`);
+    const ev = eventsOn(d).map(e => `${e.allDay ? 'toute la journée' : fmtTime(e.start) + '-' + fmtTime(e.end)} ${e.title} (agenda)`);
+    const tot = [...c, ...ev];
+    return `${cap(fmtDay(d))} : ${tot.length ? tot.join(' ; ') : 'rien de prévu'}`;
+  }).join('\n');
+  return `${todayCtx()}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
 }
 let asking = false;
 async function ask(q) {
