@@ -472,7 +472,7 @@ function rToday() {
       <div class="card subjCard"><h3>Par matière</h3><div class="list">${subjHTML || '<div class="empty">Aucun devoir en cours</div>'}</div></div>
       ${tomorrowCours.length ? `<div class="card agendaCard"><h3>Demain</h3><div class="small muted">${tomorrowCours.length} cours · de ${fmtTime(tomorrowCours[0].starts_at)} à ${fmtTime(tomorrowCours[tomorrowCours.length - 1].ends_at)}</div></div>` : ''}
       <div class="card agendaCard"><h3>À venir</h3><div class="list">${later.map(t => itemHTML(t, { noRem: true })).join('') || '<div class="empty">Rien de prévu après</div>'}</div></div>
-      <div class="card assist"><h3 style="color:var(--acc2)">✦ Assistant</h3><div id="briefOut" class="small" style="line-height:1.55;white-space:pre-wrap">${server.flags?.ai ? 'Demande-moi ton plan pour ce soir.' : 'Ajoute ta clé Gemini dans Réglages pour activer l\'IA.'}</div>
+      <div class="card assist"><h3 style="color:var(--acc2)">✦ Assistant</h3><div id="briefOut" class="small" style="line-height:1.55;white-space:pre-wrap">${server.flags?.ai ? 'Demande-moi ton plan pour ce soir.' : 'Ajoute une clé IA gratuite dans Réglages pour activer l\'assistant.'}</div>
         <form id="miniAsk"><input placeholder="Demande-moi…" aria-label="Demander à l'assistant"><button aria-label="Envoyer">${ICON.send}</button></form>
         ${server.flags?.ai ? '<button class="btn sm" id="brief" style="margin-top:10px">Mon plan du jour</button>' : ''}</div>
     </div></div>`;
@@ -528,7 +528,7 @@ function rHomework() {
         <textarea id="pnText" rows="4" placeholder="Colle ici le contenu de « Travail à faire »…"></textarea>
         <label class="drop" id="pnDrop" style="margin-top:10px"><input type="file" id="pnFile" accept="image/*" multiple hidden>📷 Déposer des captures d'écran</label>
         <div style="display:flex;gap:8px;margin-top:12px"><button class="btn p" id="pnGo" ${server.flags?.ai ? '' : 'disabled'}>Importer</button></div>
-        <div id="pnOut" class="small muted" style="margin-top:10px">${server.flags?.ai ? '' : 'Nécessite la clé Gemini (Réglages).'}</div>
+        <div id="pnOut" class="small muted" style="margin-top:10px">${server.flags?.ai ? '' : 'Nécessite une clé IA (Réglages). Les captures demandent Gemini.'}</div>
       </details></div>`;
   bindList(v); bindPronoteCard();
   let files = [];
@@ -581,7 +581,7 @@ function rAgenda() {
 
 function rAI() {
   const v = $('#v-ia');
-  if (!server.flags?.ai) { v.innerHTML = `<div class="chatwrap"><div class="msg a">Pour discuter avec moi, ajoute ta clé Gemini gratuite dans Réglages → Assistant IA.</div><button class="btn p" id="goSet" style="align-self:flex-start">Ouvrir les réglages</button></div>`; $('#goSet').onclick = openSettings; return; }
+  if (!server.flags?.ai) { v.innerHTML = `<div class="chatwrap"><div class="msg a">Pour discuter avec moi, ajoute une clé IA gratuite dans Réglages (Groq, 1 minute).</div><button class="btn p" id="goSet" style="align-self:flex-start">Ouvrir les réglages</button></div>`; $('#goSet').onclick = openSettings; return; }
   v.innerHTML = `<div class="chatwrap" id="chat">${chat.length ? '' : `<div class="msg a">Salut ! Écris-moi comme tu veux : « exposé à rendre vendredi » pour ajouter un truc, ou « qu'est-ce que je fais ce soir ? » pour un conseil. Je fais la différence tout seul.</div>`}${chat.map(m => `<div class="msg ${m.role === 'user' ? 'u' : 'a'}">${esc(m.content)}</div>`).join('')}${asking ? '<div class="msg a think"><span class="spin" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;border-color:var(--line);border-top-color:var(--acc)"></span> Je réfléchis…</div>' : ''}</div>
     <div class="sugg">${["Qu'est-ce que je dois faire ce soir ?", 'Organise ma semaine', 'Rappelle-moi de sortir les poubelles chaque lundi', "Qu'est-ce qui est en retard ?"].map(s => `<button>${s}</button>`).join('')}</div>
     <form class="chatin" id="chatF"><input id="chatIn" placeholder="Ajoute un truc ou pose une question…" autocomplete="off" aria-label="Message" ${asking ? 'disabled' : ''}><button class="btn p" style="height:48px;border-radius:16px" ${asking ? 'disabled' : ''}>Envoyer</button></form>`;
@@ -611,9 +611,11 @@ async function ask(q) {
 }
 function aiErr(e) {
   const c = String(e?.code || e?.message || '');
-  if (c === 'rate_limited') return 'Je suis un peu saturé, réessaie dans une minute.';
-  if (c === 'no_key') return 'Ajoute ta clé Gemini dans Réglages → Assistant IA.';
-  if (/Clé refusée|API key/i.test(c)) return 'Google refuse ta clé Gemini. Recrée une clé sur aistudio.google.com/apikey, copie-la en entier et colle-la dans Réglages → Assistant IA.';
+  if (c === 'rate_limited') return server.flags?.groq ? 'Les IA sont saturées en ce moment, réessaie dans une minute.' : 'Gemini est saturé en ce moment. Ajoute une clé Groq gratuite dans Réglages : Orbit basculera dessus automatiquement.';
+  if (c === 'no_key') return 'Ajoute une clé IA gratuite (Groq ou Gemini) dans Réglages.';
+  if (/Groq/i.test(c) && /refusée/i.test(c)) return 'Groq refuse ta clé : recrée-la sur console.groq.com/keys et colle-la dans Réglages.';
+  if (/Clé refusée|API key/i.test(c)) return 'Google refuse ta clé Gemini. Recrée une clé sur aistudio.google.com/apikey, copie-la en entier et colle-la dans Réglages.';
+  if (/demand|overload|unavailable/i.test(c)) return aiErr({ code: 'rate_limited' });
   if (/Failed to fetch|injoignable/i.test(c)) return 'Pas de connexion au serveur, réessaie dans un instant.';
   return "Oups, je n'ai pas pu répondre (" + c.slice(0, 120) + ').';
 }
@@ -680,8 +682,13 @@ function openSettings() {
   <label class="l">Rappels Discord</label>
   <div class="opt"><div><b>Message privé avec ping</b><p>Le bot t'envoie chaque rappel (tâches et devoirs Pronote) en MP, même quand Orbit est fermé.</p></div><button class="btn sm" id="sD">Tester</button></div>
 
-  <label class="l" for="sAI">Assistant IA (Gemini, gratuit)</label>
-  <div class="status"><span class="dot ${f.ai ? 'on' : ''}"></span>${f.ai ? 'Clé enregistrée' : 'Pas de clé'}</div>
+  <label class="l" for="sGroq">Assistant IA · Groq (gratuit, rapide — recommandé)</label>
+  <div class="status"><span class="dot ${f.groq ? 'on' : ''}"></span>${f.groq ? 'Clé enregistrée' : 'Pas de clé'}</div>
+  <div class="inline"><input class="inp" id="sGroq" placeholder="${f.groq ? 'Coller une nouvelle clé pour la remplacer' : 'Colle ta clé Groq (gsk_…)'}" autocomplete="off" spellcheck="false"><button class="btn" id="sGroqGo">Enregistrer</button></div>
+  <div class="help">Crée ta clé gratuite : <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> → connecte-toi avec Google → <b>« Create API Key »</b> → copie la clé (gsk_…).</div>
+
+  <label class="l" for="sAI">Assistant IA · Gemini (secours + lecture des captures)</label>
+  <div class="status"><span class="dot ${f.gemini ? 'on' : ''}"></span>${f.gemini ? 'Clé enregistrée' : 'Pas de clé'}</div>
   <div class="inline"><input class="inp" id="sAI" placeholder="${f.ai ? 'Coller une nouvelle clé pour la remplacer' : 'Colle ta clé Gemini (AQ.…)'}" autocomplete="off" spellcheck="false"><button class="btn" id="sAIgo">Enregistrer</button></div>
   <div class="help">Crée ta clé gratuite : <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <b>« Create API key »</b> → copie la clé en entier (elle commence par <b>AQ.</b> ou AIza).</div>
 
@@ -709,7 +716,8 @@ function openSettings() {
     catch (e) { toast('Oups', 'Serveur injoignable.'); }
     btn.disabled = false; btn.textContent = 'Enregistrer';
   };
-  $('#sAIgo').onclick = e => secret('gemini_key', $('#sAI').value.replace(/\s+/g, ''), e.target, 'IA activée');
+  $('#sAIgo').onclick = e => secret('gemini_key', $('#sAI').value.replace(/\s+/g, ''), e.target, 'Gemini activé');
+  $('#sGroqGo').onclick = e => secret('groq_key', $('#sGroq').value.replace(/\s+/g, ''), e.target, 'Groq activé');
   $('#sCalGo').onclick = e => secret('ical_url', $('#sCal').value, e.target, 'Google Agenda relié');
   $('#sLink').onclick = async () => { try { await navigator.clipboard.writeText(share); toast('Lien copié', 'Ouvre-le sur ton autre appareil.'); } catch (e) { prompt('Copie ce lien :', share); } };
   $('#sOut').onclick = () => { if (!confirm('Déconnecter Orbit de cet appareil ?')) return; localStorage.clear(); location.hash = ''; location.reload(); };

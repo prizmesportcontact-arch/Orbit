@@ -55,21 +55,20 @@ Deno.serve(async (req) => {
       case "set_secret": {
         const up: Record<string, unknown> = {};
         if (typeof b.gemini_key === "string") up.gemini_key = b.gemini_key.trim() || null;
+        if (typeof b.groq_key === "string") up.groq_key = b.groq_key.trim() || null;
         if (typeof b.ical_url === "string") {
           const u = b.ical_url.trim().replace(/^webcal:/i, "https:");
           if (u && !/^https:\/\/calendar\.google\.com\/calendar\/ical\/.+\.ics$/i.test(u)) return json({ ok: false, error: "Ce n'est pas une adresse iCal Google Agenda (elle finit par .ics)" });
           up.ical_url = u || null;
           await db.from("orbit_kv").delete().eq("key", "gcal");
         }
-        if (up.gemini_key) { await db.from("orbit_kv").delete().eq("key", "gemini_model"); const t = await gemini(String(up.gemini_key), { prompt: "Réponds juste OK." }); if (!t.ok) return json({ ok: false, error: "Clé Gemini refusée : " + t.error }); }
+        if (up.gemini_key) { await db.from("orbit_kv").delete().eq("key", "gemini_model"); const t = await gemini(String(up.gemini_key), { prompt: "Réponds juste OK." }); if (!t.ok && t.error !== "rate_limited" && !/demand|overload|unavailable/i.test(t.error)) return json({ ok: false, error: "Clé Gemini refusée : " + t.error }); }
+        if (up.groq_key) { await db.from("orbit_kv").delete().eq("key", "groq_model"); const t = await groq(String(up.groq_key), { prompt: "Réponds juste OK." }); if (!t.ok && t.error !== "rate_limited") return json({ ok: false, error: "Clé Groq refusée : " + t.error }); }
         await db.from("orbit_pronote").update(up).eq("id", 1);
         if (up.ical_url) { const g = await calendar({ ...cfg, ical_url: up.ical_url }, true); if (g.error) return json({ ok: false, error: g.error }); }
         return json({ ok: true });
       }
-      case "ai": {
-        if (!cfg.gemini_key) return json({ ok: false, error: "no_key" });
-        return json(await gemini(cfg.gemini_key, b));
-      }
+      case "ai": return json(await askAI(cfg, b));
       default: return json({ error: "action inconnue" }, 400);
     }
   } catch (e) {
@@ -100,8 +99,64 @@ async function state(cfg: any, b: any) {
     pronote: { connected: !!cfg.token, last_sync: cfg.last_sync, last_error: cfg.last_error },
     devoirs: devoirs.data ?? [], cours: cours.data ?? [],
     gcal: gcal.events ?? [], gcalAt: gcal.at ?? null, gcalError: gcal.error ?? null,
-    flags: { ai: !!cfg.gemini_key, ical: !!cfg.ical_url, discord: !!cfg.discord_id },
+    flags: { ai: !!(cfg.gemini_key || cfg.groq_key), gemini: !!cfg.gemini_key, groq: !!cfg.groq_key, ical: !!cfg.ical_url, discord: !!cfg.discord_id },
   };
+}
+
+/* ---------- IA : Groq (rapide) puis Gemini en secours ---------- */
+async function askAI(cfg: any, b: any) {
+  const providers: [string, (k: string, b: any) => Promise<any>][] = [];
+  const hasImages = (b.images ?? []).length > 0;
+  if (cfg.groq_key && !hasImages) providers.push([cfg.groq_key, groq]);
+  if (cfg.gemini_key) providers.push([cfg.gemini_key, gemini]);
+  if (!providers.length) return { ok: false, error: hasImages && cfg.groq_key ? "Lire une capture demande la clé Gemini" : "no_key" };
+  let last: any = null;
+  for (const [key, fn] of providers) {
+    const r = await fn(key, b);
+    if (r.ok) return r;
+    last = r;
+  }
+  return last;
+}
+
+const GROQ = "https://api.groq.com/openai/v1";
+async function groqModels(key: string): Promise<string[]> {
+  const { data: kv } = await db.from("orbit_kv").select("value, updated_at").eq("key", "groq_model").maybeSingle();
+  if (kv?.value?.models?.length && Date.now() - new Date(kv.updated_at).getTime() < 24 * 3600e3) return kv.value.models;
+  try {
+    const r = await fetch(`${GROQ}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
+    const ids: string[] = ((await r.json()).data ?? []).filter((m: any) => m.active !== false).map((m: any) => String(m.id));
+    const chat = ids.filter((id) => !/whisper|guard|tts|playai|orpheus|prompt|safeguard|compound|distil/i.test(id));
+    const pref = [/gpt-oss-120b/, /kimi-k2/, /llama-3\.3-70b/, /llama-4-maverick/, /qwen/, /gpt-oss-20b/, /llama-4-scout/, /llama/];
+    const models = [...new Set(pref.flatMap((re) => chat.filter((id) => re.test(id))).concat(chat))].slice(0, 4);
+    if (models.length) { await db.from("orbit_kv").upsert({ key: "groq_model", value: { models }, updated_at: new Date().toISOString() }); return models; }
+  } catch { /* valeurs par défaut */ }
+  return ["openai/gpt-oss-120b", "llama-3.3-70b-versatile"];
+}
+async function groq(key: string, b: any) {
+  const messages: any[] = [];
+  if (b.system) messages.push({ role: "system", content: String(b.system).slice(0, 30000) });
+  if (b.messages?.length) for (const m of b.messages.slice(-16)) messages.push({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content).slice(0, 8000) });
+  else messages.push({ role: "user", content: String(b.prompt ?? "").slice(0, 60000) });
+  if (b.json && !messages.some((m) => /json/i.test(m.content))) messages[0].content += "\nRéponds en JSON.";
+  let last = "", limited = false;
+  for (const model of await groqModels(key)) {
+    let r: Response;
+    try {
+      r = await fetch(`${GROQ}/chat/completions`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, messages, temperature: b.json ? 0.2 : 0.7, ...(b.json ? { response_format: { type: "json_object" } } : {}) }),
+        signal: AbortSignal.timeout(25000),
+      });
+    } catch { last = "Groq met trop de temps à répondre"; continue; }
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) return { ok: true, text: j.choices?.[0]?.message?.content ?? "", model: "groq:" + model };
+    last = j.error?.message ?? `HTTP ${r.status}`;
+    if (r.status === 401) return { ok: false, error: "Clé refusée par Groq (" + last + ")" };
+    if (r.status === 429) limited = true;
+    if (r.status === 404 || /model/i.test(last)) await db.from("orbit_kv").delete().eq("key", "groq_model");
+  }
+  return { ok: false, error: limited ? "rate_limited" : last.slice(0, 200) };
 }
 
 /* ---------- IA (Gemini) ---------- */
@@ -147,16 +202,16 @@ async function gemini(key: string, b: any) {
     const j = await r.json().catch(() => ({}));
     if (r.ok) {
       const text = (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("");
-      if (tried.size > 1) await db.from("orbit_kv").upsert({ key: "gemini_model", value: { models: [model] }, updated_at: new Date().toISOString() });
+      if (tried.size > 1) { const all = await pickModels(key); await db.from("orbit_kv").upsert({ key: "gemini_model", value: { models: [model, ...all.filter((m) => m !== model)] }, updated_at: new Date().toISOString() }); }
       return { ok: true, text, model };
     }
     last = j.error?.message ?? `HTTP ${r.status}`;
     const hint = last.match(/use models\/([\w.-]+)/i)?.[1];
     if (hint && !tried.has(hint)) queue.unshift(hint);
-    if (r.status === 429) { limited = true; continue; }
+    if (r.status === 429 || r.status === 503 || /high demand|overloaded|unavailable/i.test(last)) { limited = true; continue; }
     if (/API key not valid|API_KEY_INVALID/i.test(last)) { last = "Clé refusée par Google (" + last + ")"; break; }
   }
-  await db.from("orbit_kv").delete().eq("key", "gemini_model");
+  if (!limited) await db.from("orbit_kv").delete().eq("key", "gemini_model");
   return { ok: false, error: limited ? "rate_limited" : last.slice(0, 200) };
 }
 
