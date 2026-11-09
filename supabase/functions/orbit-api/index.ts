@@ -114,8 +114,9 @@ async function gemini(key: string, b: any) {
     : [{ role: "user", parts }];
   const body: any = { contents, generationConfig: { temperature: b.json ? 0.2 : 0.7, ...(b.json ? { responseMimeType: "application/json" } : {}) } };
   if (b.system) body.systemInstruction = { parts: [{ text: String(b.system).slice(0, 30000) }] };
-  let last = "";
-  for (const model of ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]) {
+  let last = "", limited = false;
+  // Les clés « AQ. » (nouveau format Google) ne marchent qu'avec les modèles récents : on essaie du plus récent au plus ancien.
+  for (const model of ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash"]) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body),
     });
@@ -125,10 +126,10 @@ async function gemini(key: string, b: any) {
       return { ok: true, text };
     }
     last = j.error?.message ?? `HTTP ${r.status}`;
-    if (/API key|API_KEY/i.test(last)) { last = "Clé refusée par Google (" + last + ")"; break; }
-    if (r.status === 429) return { ok: false, error: "rate_limited" };
+    if (r.status === 429) { limited = true; continue; }
+    if (/API key|API_KEY|UNAUTHENTICATED|ACCESS_TOKEN/i.test(last)) last = "Clé refusée par Google (" + last + ")";
   }
-  return { ok: false, error: last.slice(0, 200) };
+  return { ok: false, error: limited ? "rate_limited" : last.slice(0, 200) };
 }
 
 /* ---------- Google Agenda via l'adresse secrète iCal ---------- */

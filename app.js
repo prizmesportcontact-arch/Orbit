@@ -589,7 +589,7 @@ function aiErr(e) {
   const c = String(e?.code || e?.message || '');
   if (c === 'rate_limited') return 'Je suis un peu saturé, réessaie dans une minute.';
   if (c === 'no_key') return 'Ajoute ta clé Gemini dans Réglages → Assistant IA.';
-  if (/Clé refusée|API key/i.test(c)) return 'Google refuse ta clé Gemini. Crée une nouvelle clé sur aistudio.google.com/apikey (elle commence par « AIza ») et colle-la dans Réglages → Assistant IA.';
+  if (/Clé refusée|API key/i.test(c)) return 'Google refuse ta clé Gemini. Recrée une clé sur aistudio.google.com/apikey, copie-la en entier et colle-la dans Réglages → Assistant IA.';
   if (/Failed to fetch|injoignable/i.test(c)) return 'Pas de connexion au serveur, réessaie dans un instant.';
   return "Oups, je n'ai pas pu répondre (" + c.slice(0, 120) + ').';
 }
@@ -658,8 +658,8 @@ function openSettings() {
 
   <label class="l" for="sAI">Assistant IA (Gemini, gratuit)</label>
   <div class="status"><span class="dot ${f.ai ? 'on' : ''}"></span>${f.ai ? 'Clé enregistrée' : 'Pas de clé'}</div>
-  <div class="inline"><input class="inp" id="sAI" placeholder="${f.ai ? 'Coller une nouvelle clé pour la remplacer' : 'Colle ta clé (commence par AIza…)'}" autocomplete="off" spellcheck="false"><button class="btn" id="sAIgo">Enregistrer</button></div>
-  <div class="help">Crée ta clé gratuite : <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <b>« Create API key »</b> → copie la clé qui commence par <b>AIza</b> (pas le code d'un exemple).</div>
+  <div class="inline"><input class="inp" id="sAI" placeholder="${f.ai ? 'Coller une nouvelle clé pour la remplacer' : 'Colle ta clé Gemini (AQ.…)'}" autocomplete="off" spellcheck="false"><button class="btn" id="sAIgo">Enregistrer</button></div>
+  <div class="help">Crée ta clé gratuite : <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <b>« Create API key »</b> → copie la clé en entier (elle commence par <b>AQ.</b> ou AIza).</div>
 
   <label class="l" for="sCal">Google Agenda</label>
   <div class="status"><span class="dot ${f.ical ? 'on' : ''}"></span>${f.ical ? 'Relié' + (server.gcalError ? ' · ⚠️ ' + esc(server.gcalError) : '') : 'Pas relié'}</div>
@@ -685,7 +685,7 @@ function openSettings() {
     catch (e) { toast('Oups', 'Serveur injoignable.'); }
     btn.disabled = false; btn.textContent = 'Enregistrer';
   };
-  $('#sAIgo').onclick = e => { const v = $('#sAI').value.trim(); if (v && !/^AIza/.test(v)) return toast('Ce n\'est pas la bonne clé', 'Une clé Gemini commence par « AIza ». Sur AI Studio : Create API key → copie la clé.'); secret('gemini_key', v, e.target, 'IA activée'); };
+  $('#sAIgo').onclick = e => secret('gemini_key', $('#sAI').value.replace(/\s+/g, ''), e.target, 'IA activée');
   $('#sCalGo').onclick = e => secret('ical_url', $('#sCal').value, e.target, 'Google Agenda relié');
   $('#sLink').onclick = async () => { try { await navigator.clipboard.writeText(share); toast('Lien copié', 'Ouvre-le sur ton autre appareil.'); } catch (e) { prompt('Copie ce lien :', share); } };
   $('#sOut').onclick = () => { if (!confirm('Déconnecter Orbit de cet appareil ?')) return; localStorage.clear(); location.hash = ''; location.reload(); };
