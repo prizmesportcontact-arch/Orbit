@@ -264,7 +264,7 @@ Le message peut être :
 - un AJOUT (ex : « exposé à rendre vendredi », « sortir les poubelles chaque lundi », « rappelle-moi d'appeler le dentiste jeudi ») → intent "add" avec la ou les tâches ;
 - une QUESTION ou une demande de conseil (ex : « qu'est-ce que je fais ce soir ? », « organise ma semaine ») → intent "chat" ;
 - une demande de marquer quelque chose comme fait → intent "done" avec les id entre crochets.
-Pour "chat", "reply" est une VRAIE réponse complète et utile, pas une phrase d'introduction : par exemple pour « organise ma semaine », donne le plan jour par jour (lundi, mardi…) en t'appuyant sur ses cours, devoirs, tâches et agenda ci-dessous, avec des créneaux concrets (ex : « 17h30-18h15 : exo de maths ») et les priorités. Utilise des retours à la ligne et des tirets « - » pour que ce soit lisible sur téléphone. Pas de markdown (pas de **, pas de #). Pour "add" et "done", "reply" est une phrase courte.
+Pour "chat", "reply" est une VRAIE réponse complète et utile, pas une phrase d'introduction : par exemple pour « organise ma semaine », donne le plan jour par jour (lundi, mardi…) en t'appuyant sur ses cours, devoirs, tâches et agenda ci-dessous, avec des créneaux concrets (ex : « 17h30-18h15 : exo de maths ») et les priorités. Mets en forme pour un téléphone : phrases courtes, un petit titre par jour ou par partie (ex : « Lundi : » seul sur sa ligne), des tirets « - » pour les listes, **gras** pour l'essentiel (matière, priorité), horaires au format 17h30-18h15. Pas de tableau, pas de #. Pour "add" et "done", "reply" est une phrase courte.
 Dates : une date sans année = la PROCHAINE occurrence. « avant le X » = date limite X. Répétition : daily, weekdays, weekly, biweekly, monthly ou null.
 Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done","reply":"ta réponse","tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"]}`;
 function taskFrom(x, source) {
@@ -315,7 +315,7 @@ $('#capForm').addEventListener('submit', async e => {
     if (server.flags?.ai) {
       let a = null;
       try { a = await withTimeout(agent(text, chat), 50000); } catch (err) { a = null; }
-      if (a && a.intent === 'chat') { $('#capIn').value = ''; toggleCapture(false); chat.push({ role: 'user', content: text }, { role: 'assistant', content: a.reply || "Je n'ai pas compris, reformule ?" }); go('ia'); return; }
+      if (a && a.intent === 'chat') { $('#capIn').value = ''; toggleCapture(false); chat.push({ role: 'user', content: text }, { role: 'assistant', content: a.reply || "Je n'ai pas compris, reformule ?", q: text }); saveChat(); if ($('#chatList')) paintChat(); go('ia'); return; }
       if (a && a.intent === 'done' && a.done.length) { $('#capIn').value = ''; toggleCapture(false); for (const id of a.done) { const t = allItems().find(x => x.id === id); if (t) completeTask(t, true); } return; }
       if (a && a.tasks.length) { pendingList = a.tasks.map(x => taskFrom(x, 'rapide')); showPreview(true); return; }
     }
@@ -641,15 +641,71 @@ function rAgenda() {
   const on = v.querySelector('.day.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 
-function rAI() {
+// ---------- Assistant IA ----------
+const CHAT_KEY = 'orbit.chat';
+try { const c = JSON.parse(localStorage.getItem(CHAT_KEY) || '[]'); if (Array.isArray(c)) chat = c.slice(-40); } catch {}
+const saveChat = () => { try { localStorage.setItem(CHAT_KEY, JSON.stringify(chat.slice(-40))); } catch {} };
+const IA_SUGG = [["Ce soir", "Qu'est-ce que je dois faire ce soir ?"], ['Ma semaine', 'Organise ma semaine'], ['En retard', "Qu'est-ce qui est en retard ?"], ['Demain', "Qu'est-ce que j'ai demain ?"], ['Réviser', 'Fais-moi un planning de révision pour mon prochain contrôle']];
+// Mise en forme sûre : on échappe d'abord, puis on reconnaît titres, listes, gras et horaires.
+function fmtMsg(txt) {
+  const inline = x => esc(x)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[\s(])(\d{1,2}h(?:\d{2})?(?:\s?[-–à]\s?\d{1,2}h(?:\d{2})?)?)/g, '$1<span class="tm">$2</span>')
+    .replace(/✓/g, '<span class="ok">✓</span>');
+  const out = []; let list = null;
+  const close = () => { if (list) { out.push(`<${list.t}>${list.items.join('')}</${list.t}>`); list = null; } };
+  for (let raw of String(txt || '').replace(/\r/g, '').split('\n')) {
+    const l = raw.trim();
+    if (!l) { close(); continue; }
+    let m;
+    if ((m = l.match(/^#{1,4}\s*(.+)$/)) || (m = l.match(/^\*\*([^*]{2,60})\*\*\s*:?$/)) || (l.length < 48 && /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|aujourd'hui|demain|ce soir|ce week-end|priorit|conseil|à faire|matin|après-midi|soir)/i.test(l) && /:$/.test(l) && (m = [l, l.replace(/:$/, '')]))) { close(); out.push(`<h4>${inline(m[1].replace(/\*\*/g, '').replace(/:$/, ''))}</h4>`); continue; }
+    if ((m = l.match(/^[-•*]\s+(.+)$/))) { if (!list || list.t !== 'ul') { close(); list = { t: 'ul', items: [] }; } list.items.push(`<li>${inline(m[1])}</li>`); continue; }
+    if ((m = l.match(/^\d+[.)]\s+(.+)$/))) { if (!list || list.t !== 'ol') { close(); list = { t: 'ol', items: [] }; } list.items.push(`<li>${inline(m[1])}</li>`); continue; }
+    close(); out.push(`<p>${inline(l)}</p>`);
+  }
+  close(); return out.join('');
+}
+const AI_AV = `<span class="aiAv">${SVG('<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>')}</span>`;
+function msgHTML(m, i) {
+  if (m.role === 'user') return `<div class="msg u">${esc(m.content)}</div>`;
+  return `<div class="msgRow">${AI_AV}<div class="msg a${m.err ? ' err' : ''}">${fmtMsg(m.content)}${m.err ? '' : `<div class="msgAct"><button data-copy="${i}">Copier</button>${m.q ? `<button data-redo="${i}">Autre réponse</button>` : ''}</div>`}</div></div>`;
+}
+function paintChat(stick = true) {
+  const L = $('#chatList'); if (!L) return;
+  const atBottom = L.scrollHeight - L.scrollTop - L.clientHeight < 80;
+  L.innerHTML = (chat.length ? '' : `<div class="chatHello">${AI_AV}<h3>Salut Celyan 👋</h3><p>Écris-moi comme tu veux : « exposé à rendre vendredi » pour <b>ajouter</b> un truc, ou « qu'est-ce que je fais ce soir ? » pour un <b>conseil</b>. Je connais tes cours, devoirs et rappels.</p></div>`)
+    + chat.map(msgHTML).join('')
+    + (asking ? `<div class="msgRow">${AI_AV}<div class="msg a think"><i></i><i></i><i></i></div></div>` : '');
+  $('#iaSugg').hidden = chat.length > 0 || asking;
+  $('#iaNew').hidden = !chat.length;
+  const inp = $('#chatIn'), btn = $('#chatF button'); if (inp) { inp.disabled = asking; btn.disabled = asking; }
+  if (stick || atBottom) requestAnimationFrame(() => { const last = L.querySelector('.msgRow:last-child, .msg.u:last-child'); if (last && last.offsetHeight > L.clientHeight * .7 && !asking && chat.at(-1)?.role === 'assistant') L.scrollTop = last.offsetTop - 10; else L.scrollTop = L.scrollHeight; });
+}
+function rAI(force) {
   const v = $('#v-ia');
-  if (!server.flags?.ai) { v.innerHTML = `<div class="chatwrap"><div class="msg a">Pour discuter avec moi, ajoute une clé IA gratuite dans Réglages (Groq, 1 minute).</div><button class="btn p" id="goSet" style="align-self:flex-start">Ouvrir les réglages</button></div>`; $('#goSet').onclick = openSettings; return; }
-  v.innerHTML = `<div class="chatwrap" id="chat">${chat.length ? '' : `<div class="msg a">Salut ! Écris-moi comme tu veux : « exposé à rendre vendredi » pour ajouter un truc, ou « qu'est-ce que je fais ce soir ? » pour un conseil. Je fais la différence tout seul.</div>`}${chat.map(m => `<div class="msg ${m.role === 'user' ? 'u' : 'a'}">${esc(m.content)}</div>`).join('')}${asking ? '<div class="msg a think"><span class="spin" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;border-color:var(--line);border-top-color:var(--acc)"></span> Je réfléchis…</div>' : ''}</div>
-    <div class="sugg" ${chat.length ? 'hidden' : ''}>${["Qu'est-ce que je dois faire ce soir ?", 'Organise ma semaine', 'Rappelle-moi de sortir les poubelles chaque lundi', "Qu'est-ce qui est en retard ?"].map(s => `<button>${s}</button>`).join('')}</div>
-    <form class="chatin" id="chatF"><input id="chatIn" placeholder="Ajoute un truc ou pose une question…" autocomplete="off" aria-label="Message" ${asking ? 'disabled' : ''}><button class="btn p" style="height:48px;border-radius:16px" ${asking ? 'disabled' : ''}>Envoyer</button></form>`;
-  v.querySelectorAll('.sugg button').forEach(b => b.onclick = () => ask(b.textContent));
-  $('#chatF').onsubmit = e => { e.preventDefault(); const q = $('#chatIn').value.trim(); if (q) ask(q); };
-  requestAnimationFrame(() => { v.scrollTop = v.scrollHeight; if (!asking && !matchMedia('(max-width:899px)').matches) $('#chatIn')?.focus(); });
+  if (!server.flags?.ai) { v.classList.remove('iaV'); v.innerHTML = `<div class="chatwrap"><div class="msg a">Pour discuter avec moi, ajoute une clé IA gratuite dans Réglages (Groq, 1 minute).</div><button class="btn p" id="goSet" style="align-self:flex-start">Ouvrir les réglages</button></div>`; $('#goSet').onclick = openSettings; return; }
+  if ($('#chatList') && !force) return; // déjà affiché : on ne reconstruit pas (garde le défilement et la saisie)
+  v.classList.add('iaV');
+  v.innerHTML = `<div class="iaTop"><div><span class="liveDot"></span><span>${server.flags?.groq ? 'Groq' : 'Gemini'} · connaît ton planning</span></div><button class="btn" id="iaNew" hidden>Nouvelle conv.</button></div>
+    <div class="chatList" id="chatList"></div>
+    <div class="iaBottom">
+      <div class="sugg" id="iaSugg">${IA_SUGG.map(([l, q]) => `<button data-q="${esc(q)}">${l}</button>`).join('')}</div>
+      <form class="chatin" id="chatF"><textarea id="chatIn" rows="1" placeholder="Ajoute un truc ou pose une question…" aria-label="Message" enterkeyhint="send"></textarea><button aria-label="Envoyer">${SVG('<path d="M5 12h14M13 6l6 6-6 6"/>')}</button></form>
+    </div>`;
+  const inp = $('#chatIn');
+  const grow = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px'; };
+  inp.oninput = grow;
+  inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(max-width:899px)').matches) { e.preventDefault(); $('#chatF').requestSubmit(); } };
+  $('#chatF').onsubmit = e => { e.preventDefault(); const q = inp.value.trim(); if (q) { inp.value = ''; grow(); ask(q); } };
+  v.querySelectorAll('#iaSugg button').forEach(b => b.onclick = () => ask(b.dataset.q));
+  $('#iaNew').onclick = () => { chat = []; saveChat(); paintChat(); };
+  $('#chatList').onclick = e => {
+    const c = e.target.closest('[data-copy]'), r = e.target.closest('[data-redo]');
+    if (c) { navigator.clipboard?.writeText(chat[+c.dataset.copy].content).then(() => toast('Copié', ''), () => {}); }
+    if (r && !asking) { const i = +r.dataset.redo, q = chat[i].q; chat.splice(i - 1, 2); ask(q); }
+  };
+  paintChat();
+  if (!matchMedia('(max-width:899px)').matches) inp.focus();
 }
 function snapshotCtx() {
   const A = active().sort(byDue).slice(0, 60).map(t => `- [${t.id}] ${t.title}${t.kind === 'devoir' ? ' (devoir ' + (t.subject || '') + ')' : ''}${t.due ? ' — pour le ' + t.due + (t.time ? ' ' + t.time : '') : ''}${t.repeat ? ' — répétition ' + t.repeat : ''}`).join('\n');
@@ -667,16 +723,17 @@ function snapshotCtx() {
 let asking = false;
 async function ask(q) {
   if (asking || !q) return; asking = true;
-  chat.push({ role: 'user', content: q }); rAI();
+  chat.push({ role: 'user', content: q }); saveChat();
+  if ($('#chatList')) paintChat(); else rAI(true);
   try {
-    const a = await withTimeout(agent(q, chat.slice(0, -1)), 55000);
+    const a = await withTimeout(agent(q, chat.slice(0, -1).filter(m => !m.err)), 55000);
     const notes = [];
-    if (a.intent === 'add' && a.tasks.length) { const L = a.tasks.map(x => taskFrom(x, 'ia')); L.forEach(saveTask); notes.push(`✓ Ajouté : ${L.map(t => t.title + (t.due ? ' (' + dueLabel(t).toLowerCase() + ')' : '')).join(', ')}`); }
+    if (a.intent === 'add' && a.tasks.length) { const L = a.tasks.map(x => taskFrom(x, 'ia')); L.forEach(saveTask); notes.push(`✓ **Ajouté :**\n${L.map(t => '- ' + t.title + (t.due ? ' (' + dueLabel(t).toLowerCase() + ')' : '')).join('\n')}`); }
     if (a.done.length) { let n = 0; for (const id of a.done) { const t = allItems().find(x => x.id === id); if (t) { completeTask(t, true); n++; } } if (n) notes.push(`✓ ${n} terminé${n > 1 ? 's' : ''}`); }
     const head = a.intent === 'add' && notes.length ? '' : (a.reply || (notes.length ? '' : "Je n'ai pas compris, reformule ?"));
-    chat.push({ role: 'assistant', content: [head, ...notes].filter(Boolean).join('\n\n') });
-  } catch (e) { chat.push({ role: 'assistant', content: e.code === 'timeout' ? "L'IA met trop de temps à répondre. Réessaie dans un instant." : aiErr(e) }); }
-  finally { asking = false; if (current === 'ia') rAI(); }
+    chat.push({ role: 'assistant', content: [head, ...notes].filter(Boolean).join('\n\n'), q: a.intent === 'chat' ? q : undefined });
+  } catch (e) { chat.push({ role: 'assistant', err: true, content: e.code === 'timeout' ? "L'IA met trop de temps à répondre. Réessaie dans un instant." : aiErr(e) }); }
+  finally { asking = false; saveChat(); if (current === 'ia') { if ($('#chatList')) paintChat(); else rAI(true); } }
 }
 function aiErr(e) {
   const c = String(e?.code || e?.message || '');
