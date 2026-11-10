@@ -18,6 +18,19 @@ const clean = (html: string) =>
 
 const sha = async (t: string) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
+// Pronote donne des heures « murales » françaises (8:30 = 8:30 à Paris). Le serveur étant en UTC,
+// la Date reçue porte ces chiffres en UTC : on les réinterprète comme heure de Paris.
+function parisWall(d: Date) {
+  const y = d.getUTCFullYear(), mo = d.getUTCMonth(), da = d.getUTCDate(), h = d.getUTCHours(), mi = d.getUTCMinutes();
+  const guess = Date.UTC(y, mo, da, h, mi);
+  const off = (t: number) => {
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Paris", hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute) - t;
+  };
+  let t = guess - off(guess); t = guess - off(t);
+  return new Date(t);
+}
+
 // Date "jour" vue de Paris (les échéances Pronote sont des jours, pas des heures)
 const parisDay = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(d);
 
@@ -74,7 +87,7 @@ Deno.serve(async (req) => {
     const list = await pronote.assignmentsFromIntervals(session, start, end);
     const byId = new Map<string, any>();
     for (const a of list) {
-      const subject = a.subject?.name ?? null, description = clean(a.description).slice(0, 2000), due = parisDay(new Date(a.deadline));
+      const subject = a.subject?.name ?? null, description = clean(a.description).slice(0, 2000), due = new Date(a.deadline).toISOString().slice(0, 10);
       const id = "d" + (await sha(`${subject}|${due}|${description}`)).slice(0, 24);
       const prev = byId.get(id);
       byId.set(id, { id, subject, description, due, done: !!a.done || !!prev?.done, updated_at: now.toISOString() });
@@ -97,14 +110,14 @@ Deno.serve(async (req) => {
       const tt = await pronote.timetableFromIntervals(session, new Date(now.getTime() - 864e5), new Date(now.getTime() + 14 * 864e5));
       pronote.parseTimetable(session, tt, { withCanceledClasses: true, withPlannedClasses: true, withSuperposedCanceledClasses: false });
       const cr = tt.classes.map((c: any) => ({
-        id: c.id + "@" + new Date(c.startDate).toISOString(),
+        id: c.id + "@" + parisWall(new Date(c.startDate)).toISOString(),
         subject: c.is === "lesson" ? (c.subject?.name ?? null) : (c.title ?? (c.is === "detention" ? "Retenue" : "Activité")),
         room: (c.classrooms ?? []).join(", ") || null,
         teacher: (c.teacherNames ?? []).join(", ") || null,
-        starts_at: new Date(c.startDate).toISOString(), ends_at: new Date(c.endDate).toISOString(),
+        starts_at: parisWall(new Date(c.startDate)).toISOString(), ends_at: parisWall(new Date(c.endDate)).toISOString(),
         canceled: !!c.canceled, status: c.status ?? null, updated_at: now.toISOString(),
       }));
-      await db.from("orbit_cours").delete().gte("starts_at", new Date(now.getTime() - 864e5).toISOString());
+      await db.from("orbit_cours").delete().gte("starts_at", new Date(now.getTime() - 2 * 864e5).toISOString());
       if (cr.length) await db.from("orbit_cours").upsert(cr, { onConflict: "id" });
       await db.from("orbit_cours").delete().lt("starts_at", new Date(now.getTime() - 7 * 864e5).toISOString());
       cours = cr.length;
