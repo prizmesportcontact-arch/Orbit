@@ -412,3 +412,4 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
 .iaTop>div{display:flex;align-items:center;gap:7px}
 .liveDot{width:7px;height:7px;border-radius:50%;background:var(--good,#5be39b);box-shadow:0 0 0 3px color-mix(in srgb,var(--good,#5be39b) 25%,transparent)}
 .iaTop{padding-bottom:6px;min-height:40px}
+.tag.rev{background:#3a2a10;color:#ffb547}

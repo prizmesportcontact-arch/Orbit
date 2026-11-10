@@ -34,7 +34,7 @@ const REPEATS = { '': 'Jamais', daily: 'Tous les jours', weekdays: 'En semaine (
 /* ---------- État ---------- */
 let key = store.get('orbit.key', null);
 let tasks = store.get('orbit.tasks', []);
-let settings = Object.assign({ accent: 'corail', intensite: 'normal', pronoteDone: [] }, store.get('orbit.settings', {}));
+let settings = Object.assign({ accent: 'corail', intensite: 'normal', pronoteDone: [], revDone: [] }, store.get('orbit.settings', {}));
 let server = store.get('orbit.server', { devoirs: [], cours: [], gcal: [], pronote: {}, flags: {} });
 let lastSince = store.get('orbit.since', null);
 let outbox = store.get('orbit.outbox', { put: {}, del: [], settings: false });
@@ -71,7 +71,7 @@ function dayTitle(d) {
 
 /* ---------- Matières Pronote ---------- */
 const SUBJ = { 'MATHEMATIQUES': 'Maths', 'FRANCAIS': 'Français', 'ANGLAIS LV1': 'Anglais', 'ANGLAIS LV2': 'Anglais', 'ALLEMAND LV1': 'Allemand', 'ALLEMAND LV2': 'Allemand', 'ESPAGNOL LV1': 'Espagnol', 'ESPAGNOL LV2': 'Espagnol', 'PHYSIQUE-CHIMIE': 'Physique-chimie', 'PHYSIQ.CHIMIE&MATHS': 'Physique-chimie & maths', 'HISTOIRE-GEOGRAPHIE': 'Histoire-géo', 'HISTOIRE & GEOGRAPHIE': 'Histoire-géo', 'ED.PHYSIQUE & SPORT.': 'EPS', 'EPS': 'EPS', 'PHILOSOPHIE': 'Philo', 'SCIENCES ECO.& SOCIAL.': 'SES', 'SC. ECONO.& SOCIALES': 'SES', 'SCIENCES VIE & TERRE': 'SVT', 'ENS. MORAL & CIVIQUE': 'EMC', 'ENSEIGN.SCIENTIFIQUE': 'Enseignement scientifique', 'IT-INNOVATION TECHNOLOGIQUE': 'Innovation techno', 'ENS.TECHNO. EN LV1': 'ETLV', 'NUMERIQUE SC.INFORM.': 'NSI', 'ACCOMPAGNEMT. PERSO': 'Accompagnement perso', 'ACCOMPAGNEMENT PERSO': 'Accompagnement perso', 'VIE DE CLASSE': 'Vie de classe' };
-function prettySubj(s) { if (!s) return null; const k = String(s).trim().toUpperCase().replace(/\s*\d+$/, ''); if (SUBJ[k]) return SUBJ[k]; return k.toLowerCase().replace(/(^|[\s\-'.&(])([a-zà-ÿ])/g, (m, a, b) => a + b.toUpperCase()); }
+function prettySubj(s) { if (!s) return null; const u = String(s).trim().toUpperCase(), k = u.replace(/\s*\d+$/, '').replace(/\s+LV$/, ''); if (SUBJ[u]) return SUBJ[u]; if (SUBJ[k]) return SUBJ[k]; return k.toLowerCase().replace(/(^|[\s\-'.&(])([a-zà-ÿ])/g, (m, a, b) => a + b.toUpperCase()); }
 const COLORS = ['#ff6a47', '#ffb23f', '#6f9bff', '#4fd1a5', '#c58cff', '#ff8fb1', '#e8c48a', '#7fd3ff'];
 const SUBJ_ICONS = [
   [/math|algèbre|géom/i, '<path d="M18 5V4H6l6 8-6 8h12v-1"/>'],
@@ -113,7 +113,25 @@ function pronoteReminders(due) {
     const at = addDays(d, -n); at.setHours(h, m, 0, 0); return { at: at.toISOString(), label, fired: at <= now };
   });
 }
-const allItems = () => [...tasks.filter(t => !t.deleted), ...pronoteItems()];
+/* Contrôles repérés dans les devoirs/tâches → 3 séances de révision (J-3, J-2, J-1 à 18h) */
+const EXAM_RE = /(?:^|[^\p{L}])(contr[ôo]le|ds|interro(?:gation)?|[ée]valuation|[ée]val|examen|bac blanc|partiel)(?![\p{L}])/iu;
+function examList() {
+  const P = (server.devoirs || []).filter(d => !d.done && EXAM_RE.test(decode(d.description || ''))).map(d => ({ id: 'p' + d.id, subject: prettySubj(d.subject), due: d.due, what: decode(d.description || '').split('\n')[0].slice(0, 200) }));
+  const T = tasks.filter(t => !t.deleted && !t.done && t.due && t.kind !== 'revision' && EXAM_RE.test(t.title + ' ' + (t.note || ''))).map(t => ({ id: 'o' + t.id, subject: t.subject || t.title, due: t.due, what: t.title }));
+  return [...P, ...T];
+}
+function revisionItems() {
+  const done = new Set(settings.revDone || []), today = ymd(new Date()), out = [];
+  for (const x of examList()) for (const n of [3, 2, 1]) {
+    const day = ymd(addDays(new Date(x.due + 'T12:00:00'), -n)), id = `rv:${x.id}:${n}`;
+    if (day < today && !done.has(id)) continue; // séance passée : on ne la compte pas en retard
+    const at = new Date(day + 'T18:00:00');
+    out.push({ id, kind: 'revision', source: 'revision', subject: x.subject, due: day, time: '18:00', title: `Réviser ${x.subject} · contrôle ${n === 1 ? 'demain' : 'dans ' + n + ' j'}`,
+      note: `Séance ${4 - n}/3, 30-45 min.\nContrôle le ${fmtDay(new Date(x.due + 'T12:00:00'))} : ${x.what}`, done: done.has(id), reminders: [{ at: at.toISOString(), label: 'Révision', fired: at <= new Date() }] });
+  }
+  return out;
+}
+const allItems = () => [...tasks.filter(t => !t.deleted), ...pronoteItems(), ...revisionItems()];
 const active = () => allItems().filter(t => !t.done);
 const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || (a.time || '').localeCompare(b.time || '');
 
@@ -203,6 +221,7 @@ const queueFlush = () => { clearTimeout(flushTimer); flushTimer = setTimeout(flu
 
 function saveTask(t) {
   if (String(t.id).startsWith('pn:')) return setPronoteDone(t.pronoteId, t.done);
+  if (String(t.id).startsWith('rv:')) { const s = new Set(settings.revDone || []); if (t.done) s.add(t.id); else s.delete(t.id); settings.revDone = [...s].slice(-200); saveSettings(); render(); return; }
   const i = tasks.findIndex(x => x.id === t.id); if (i < 0) tasks.push(t); else tasks[i] = t;
   outbox.put[t.id] = t; persist(); render(); queueFlush(); scheduleRappels();
 }
@@ -216,7 +235,7 @@ function setPronoteDone(pid, done) {
   settings.pronoteDone = [...s]; saveSettings(); render(); scheduleRappels();
 }
 function completeTask(t, done = true) {
-  if (done && t.repeat && t.due && !String(t.id).startsWith('pn:')) {
+  if (done && t.repeat && t.due && !/^(pn|rv):/.test(String(t.id))) {
     const next = { ...t, id: uid(), due: nextOccurrence(t), done: false, doneAt: null, createdAt: new Date().toISOString() };
     next.reminders = buildReminders(next);
     saveTask({ ...t, done: true, doneAt: new Date().toISOString(), repeat: null, repeatedTo: next.id });
@@ -263,10 +282,11 @@ const AGENT_RULES = `Tu es l'assistant d'organisation intégré à l'appli « Or
 Le message peut être :
 - un AJOUT (ex : « exposé à rendre vendredi », « sortir les poubelles chaque lundi », « rappelle-moi d'appeler le dentiste jeudi ») → intent "add" avec la ou les tâches ;
 - une QUESTION ou une demande de conseil (ex : « qu'est-ce que je fais ce soir ? », « organise ma semaine ») → intent "chat" ;
-- une demande de marquer quelque chose comme fait → intent "done" avec les id entre crochets.
-Pour "chat", "reply" est une VRAIE réponse complète et utile, pas une phrase d'introduction : par exemple pour « organise ma semaine », donne le plan jour par jour (lundi, mardi…) en t'appuyant sur ses cours, devoirs, tâches et agenda ci-dessous, avec des créneaux concrets (ex : « 17h30-18h15 : exo de maths ») et les priorités. Mets en forme pour un téléphone : phrases courtes, un petit titre par jour ou par partie (ex : « Lundi : » seul sur sa ligne), des tirets « - » pour les listes, **gras** pour l'essentiel (matière, priorité), horaires au format 17h30-18h15. Pas de tableau, pas de #. Pour "add" et "done", "reply" est une phrase courte.
+- une demande de marquer quelque chose comme fait → intent "done" avec les id entre crochets ;
+- une demande de MODIFIER, DÉCALER ou SUPPRIMER (ex : « décale tout à demain », « mets le dentiste à 17h », « supprime le rappel poubelles », « renomme X ») → intent "edit" : "edits" liste les changements [{"id":"…","due":"YYYY-MM-DD","time":"HH:MM"|null,"title":"…"}] (ne mets que les champs qui changent ; "time":null enlève l'heure) et "remove" les id à supprimer. « tout » = toutes les tâches concernées de la liste ci-dessous. Les devoirs Pronote (id qui commence par pn:) et les révisions (rv:) ne peuvent être ni décalés ni supprimés : dis-le dans "reply" et propose de les marquer faits.
+Pour "chat", "reply" est une VRAIE réponse complète et utile, pas une phrase d'introduction : par exemple pour « organise ma semaine », donne le plan jour par jour (lundi, mardi…) en t'appuyant sur ses cours, devoirs, tâches et agenda ci-dessous, avec des créneaux concrets (ex : « 17h30-18h15 : exo de maths ») et les priorités. Mets en forme pour un téléphone : phrases courtes, un petit titre par jour ou par partie (ex : « Lundi : » seul sur sa ligne), des tirets « - » pour les listes, **gras** pour l'essentiel (matière, priorité), horaires au format 17h30-18h15. Pas de tableau, pas de #. Pour "add", "done" et "edit", "reply" est une phrase courte qui dit ce que tu as fait.
 Dates : une date sans année = la PROCHAINE occurrence. « avant le X » = date limite X. Répétition : daily, weekdays, weekly, biweekly, monthly ou null.
-Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done","reply":"ta réponse","tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"]}`;
+Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done"|"edit","reply":"ta réponse","tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"],"edits":[],"remove":[]}`;
 function taskFrom(x, source) {
   const t = { id: uid(), title: cap(String(x.title || '').trim()) || 'Sans titre', due: x.due || null, time: x.time || null, kind: ['tache', 'devoir', 'rdv'].includes(x.kind) ? x.kind : 'tache', subject: x.subject || null, repeat: REPEATS[x.repeat] ? x.repeat || null : null, note: x.note || null, done: false, createdAt: new Date().toISOString(), source };
   if (t.repeat && !t.due) t.due = ymd(new Date());
@@ -275,7 +295,26 @@ function taskFrom(x, source) {
 }
 async function agent(text, history = []) {
   const r = await aiJSON({ system: AGENT_RULES + '\n\n' + snapshotCtx(), messages: [...history.slice(-10), { role: 'user', content: text }] });
-  return { intent: r.intent || (r.tasks?.length ? 'add' : 'chat'), reply: String(r.reply || ''), tasks: Array.isArray(r.tasks) ? r.tasks.filter(x => x && x.title) : [], done: Array.isArray(r.done) ? r.done : [] };
+  return { intent: r.intent || (r.tasks?.length ? 'add' : 'chat'), reply: String(r.reply || ''), tasks: Array.isArray(r.tasks) ? r.tasks.filter(x => x && x.title) : [], done: Array.isArray(r.done) ? r.done : [], edits: Array.isArray(r.edits) ? r.edits.filter(x => x && x.id) : [], remove: Array.isArray(r.remove) ? r.remove.map(String) : [] };
+}
+// Applique les modifications demandées à l'IA ; renvoie un résumé lisible.
+function applyEdits(a) {
+  const notes = [], moved = [], gone = [], locked = [];
+  for (const e of a.edits) {
+    const t = tasks.find(x => x.id === e.id && !x.deleted);
+    if (!t) { if (/^(pn|rv):/.test(e.id)) locked.push(allItems().find(x => x.id === e.id)?.title || e.id); continue; }
+    const nt = { ...t };
+    if (typeof e.title === 'string' && e.title.trim()) nt.title = cap(e.title.trim());
+    if (/^\d{4}-\d{2}-\d{2}$/.test(e.due || '')) nt.due = e.due;
+    if (e.time === null || /^\d{2}:\d{2}$/.test(e.time || '')) { if ('time' in e) nt.time = e.time; }
+    if (nt.due !== t.due || nt.time !== t.time) nt.reminders = buildReminders(nt);
+    saveTask(nt); moved.push(nt.title + (nt.due ? ' → ' + dueLabel(nt).toLowerCase() + (nt.time ? ' à ' + nt.time.replace(':', 'h') : '') : ''));
+  }
+  for (const id of a.remove) { const t = tasks.find(x => x.id === id && !x.deleted); if (t) { removeTask(id); gone.push(t.title); } else if (/^(pn|rv):/.test(id)) locked.push(allItems().find(x => x.id === id)?.title || id); }
+  if (moved.length) notes.push(`✓ **Modifié :**\n${moved.map(x => '- ' + x).join('\n')}`);
+  if (gone.length) notes.push(`✓ **Supprimé :**\n${gone.map(x => '- ' + x).join('\n')}`);
+  if (locked.length) notes.push(`Pas modifiable ici (Pronote / révision) : ${locked.join(', ')}. Tu peux les marquer faits.`);
+  return notes;
 }
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -317,6 +356,7 @@ $('#capForm').addEventListener('submit', async e => {
       try { a = await withTimeout(agent(text, chat), 50000); } catch (err) { a = null; }
       if (a && a.intent === 'chat') { $('#capIn').value = ''; toggleCapture(false); chat.push({ role: 'user', content: text }, { role: 'assistant', content: a.reply || "Je n'ai pas compris, reformule ?", q: text }); saveChat(); if ($('#chatList')) paintChat(); go('ia'); return; }
       if (a && a.intent === 'done' && a.done.length) { $('#capIn').value = ''; toggleCapture(false); for (const id of a.done) { const t = allItems().find(x => x.id === id); if (t) completeTask(t, true); } return; }
+      if (a && a.intent === 'edit' && (a.edits.length || a.remove.length)) { $('#capIn').value = ''; toggleCapture(false); const n = applyEdits(a); toast('C\'est fait', (a.reply || n.join(' ')).replace(/\*\*/g, '').slice(0, 120)); return; }
       if (a && a.tasks.length) { pendingList = a.tasks.map(x => taskFrom(x, 'rapide')); showPreview(true); return; }
     }
     const p = localParse(text);
@@ -391,11 +431,11 @@ function setHeader() {
 /* ---------- Rendu ---------- */
 function itemHTML(t, opts = {}) {
   const n = nextReminder(t), cls = dueClass(t);
-  const lead = t.kind === 'devoir' && t.subject && !opts.noSq ? subjBadge(t.subject) : '';
+  const lead = (t.kind === 'devoir' || t.kind === 'revision') && t.subject && !opts.noSq ? subjBadge(t.subject) : '';
   return `<div class="item ${t.done ? 'done' : ''}" data-id="${esc(t.id)}">
     <button class="check" data-act="toggle" aria-label="${t.done ? 'Remettre à faire' : 'Terminer'}">${ICON.check}</button>${lead}
     <div class="bd" data-act="open"><div class="tt">${esc(t.title)}</div>
-      <div class="mm">${t.due && !opts.noDue ? `<span class="tag ${cls}">${dueLabel(t)}</span>` : ''}${t.kind === 'devoir' ? `<span class="tag acc">${esc(t.subject || 'Devoir')}</span>` : ''}${t.kind === 'rdv' ? '<span class="tag acc">RDV</span>' : ''}${t.repeat ? `<span class="tag rep">↻ ${esc(REPEATS[t.repeat])}</span>` : ''}${t.source === 'pronote' ? '<span class="tag">Pronote</span>' : ''}${n && !t.done && !opts.noRem ? `<span>${ICON.bell.replace('<svg', '<svg style="width:12px;height:12px;vertical-align:-2px"')} ${new Date(n.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(n.at)}</span>` : ''}</div></div>
+      <div class="mm">${t.due && !opts.noDue ? `<span class="tag ${cls}">${dueLabel(t)}</span>` : ''}${t.kind === 'devoir' ? `<span class="tag acc">${esc(t.subject || 'Devoir')}</span>` : ''}${t.kind === 'rdv' ? '<span class="tag acc">RDV</span>' : ''}${t.repeat ? `<span class="tag rep">↻ ${esc(REPEATS[t.repeat])}</span>` : ''}${t.source === 'pronote' ? '<span class="tag">Pronote</span>' : ''}${t.kind === 'revision' ? '<span class="tag rev">📖 Révision</span>' : ''}${n && !t.done && !opts.noRem ? `<span>${ICON.bell.replace('<svg', '<svg style="width:12px;height:12px;vertical-align:-2px"')} ${new Date(n.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(n.at)}</span>` : ''}</div></div>
     <button class="more" data-act="open" aria-label="Détails">${ICON.dots}</button></div>`;
 }
 function bindList(root) {
@@ -506,7 +546,7 @@ function rToday() {
       <div class="info"><span class="pillTag">${esc(next.subject || (next.kind === 'devoir' ? 'Devoir' : next.kind === 'rdv' ? 'Rendez-vous' : 'Tâche'))}${next.source === 'pronote' ? ' · Pronote' : ''}</span>
         <span class="ttl">${esc(next.title)}</span>
         <span class="meta">${rem.length ? 'Rappels : ' + rem.map(x => new Date(x.at).toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '') + ' ' + fmtTime(x.at)).join(' · ') : 'Échéance : ' + fmtDay(dueDate(next))}</span>
-        <div class="btns"><button class="btn p" id="heroDone">Marquer fait</button>${next.source === 'pronote' ? '' : '<button class="btn" id="heroLater">Reporter</button>'}</div></div></div>`;
+        <div class="btns"><button class="btn p" id="heroDone">Marquer fait</button>${next.source === 'pronote' || next.source === 'revision' ? '' : '<button class="btn" id="heroLater">Reporter</button>'}</div></div></div>`;
   } else hero = `<div class="hero"><div class="info"><span class="ttl">Rien à l'horizon 🙌</span><span class="meta">Ajoute une tâche avec le + ou connecte Pronote.</span></div></div>`;
 
   const row = (cls, when, inner, sort) => ({ sort, h: `<div class="row ${cls}"><span class="when">${when}</span><span class="node"></span>${inner}</div>` });
@@ -574,7 +614,7 @@ function segPill(sel) { requestAnimationFrame(() => { const s = $(sel); if (!s) 
 
 function rHomework() {
   const v = $('#v-devoirs');
-  const H = allItems().filter(t => t.kind === 'devoir' && !t.done).sort(byDue);
+  const H = allItems().filter(t => (t.kind === 'devoir' || t.kind === 'revision') && !t.done).sort(byDue);
   const subjects = [...new Set(H.map(t => t.subject || 'Autre'))];
   const groups = new Map(); for (const t of H) { const k = daysLeft(t) < 0 ? 'late' : t.due || 'none'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
   let list = '';
@@ -729,8 +769,9 @@ async function ask(q) {
     const a = await withTimeout(agent(q, chat.slice(0, -1).filter(m => !m.err)), 55000);
     const notes = [];
     if (a.intent === 'add' && a.tasks.length) { const L = a.tasks.map(x => taskFrom(x, 'ia')); L.forEach(saveTask); notes.push(`✓ **Ajouté :**\n${L.map(t => '- ' + t.title + (t.due ? ' (' + dueLabel(t).toLowerCase() + ')' : '')).join('\n')}`); }
+    if (a.edits.length || a.remove.length) notes.push(...applyEdits(a));
     if (a.done.length) { let n = 0; for (const id of a.done) { const t = allItems().find(x => x.id === id); if (t) { completeTask(t, true); n++; } } if (n) notes.push(`✓ ${n} terminé${n > 1 ? 's' : ''}`); }
-    const head = a.intent === 'add' && notes.length ? '' : (a.reply || (notes.length ? '' : "Je n'ai pas compris, reformule ?"));
+    const head = (a.intent === 'add' || a.intent === 'edit') && notes.length ? '' : (a.reply || (notes.length ? '' : "Je n'ai pas compris, reformule ?"));
     chat.push({ role: 'assistant', content: [head, ...notes].filter(Boolean).join('\n\n'), q: a.intent === 'chat' ? q : undefined });
   } catch (e) { chat.push({ role: 'assistant', err: true, content: e.code === 'timeout' ? "L'IA met trop de temps à répondre. Réessaie dans un instant." : aiErr(e) }); }
   finally { asking = false; saveChat(); if (current === 'ia') { if ($('#chatList')) paintChat(); else rAI(true); } }
@@ -761,11 +802,11 @@ function gcalLink(t) {
   return 'https://calendar.google.com/calendar/render?' + p;
 }
 function openEditor(t, isNew = false) {
-  const s = $('#sheet'), pn = t.source === 'pronote';
+  const s = $('#sheet'), pn = t.source === 'pronote' || t.source === 'revision';
   const link = gcalLink(t);
   if (pn) {
     s.innerHTML = `<div class="grab"></div><h2>${esc(t.subject || 'Devoir')}</h2>
-      <p class="small muted" style="margin-top:4px">Pronote · pour ${t.due ? fmtDay(dueDate(t)) : '—'}</p>
+      <p class="small muted" style="margin-top:4px">${t.source === 'revision' ? 'Révision · ' + (t.due ? fmtDay(dueDate(t)) + ' à 18h' : '') : 'Pronote · pour ' + (t.due ? fmtDay(dueDate(t)) : '—')}</p>
       <div style="margin-top:14px;line-height:1.55;white-space:pre-wrap">${esc(t.note || t.title)}</div>
       <label class="l">Rappels Discord</label><div class="chips">${t.reminders.map(r => `<span class="chip ${r.fired ? '' : 'acc'}">${r.label} · ${new Date(r.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(r.at)}</span>`).join('')}</div>
       <div class="acts"><button class="btn p" id="eDone">${t.done ? 'Remettre à faire' : 'Marquer fait'}</button>${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}<button class="btn" id="eX">Fermer</button></div>`;
