@@ -93,7 +93,8 @@ function subjIcon(name, size = 18) {
   const p = (SUBJ_ICONS.find(([re]) => re.test(name || '')) || [, '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/>'])[1];
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#100e0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 }
-const subjBadge = (name, cls = 'sq') => `<span class="${cls}" style="background:${subjColor(name)}" title="${esc(name || '')}">${subjIcon(name)}</span>`;
+const subjBadge = (name, cls = 'sq', off = false) => `<span class="${cls}${off ? ' off' : ''}" style="background:${off ? '#5b5653' : subjColor(name)}" title="${esc(name || '')}">${subjIcon(name)}</span>`;
+const isOff = c => !!c && (c.canceled || /absent|annul|supprim|pas de prof/i.test(c.status || ''));
 function subjColor(name) { let h = 0; for (const c of String(name || '?')) h = (h * 31 + c.charCodeAt(0)) | 0; return COLORS[Math.abs(h) % COLORS.length]; }
 const decode = s => { const t = document.createElement('textarea'); t.innerHTML = String(s ?? ''); return t.value; };
 
@@ -424,7 +425,7 @@ const teacherName = t => t ? String(t).split(',')[0].trim().replace(/^(\S+)\s+(\
 function coursHTML(c) {
   const s = prettySubj(c.subject) || 'Cours';
   const why = c.status && !/^annul/i.test(c.status) ? c.status : '';
-  if (c.canceled) return `<div class="item cours canceled">${subjBadge(s)}<div class="bd"><div class="cancelTop"><span class="tag cancel">ANNULÉ</span>${why ? `<b>${esc(why)}</b>` : ''}</div><div class="tt">${esc(s)}</div><div class="mm"><span>${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}</div></div></div>`;
+  if (isOff(c)) return `<div class="item cours canceled">${subjBadge(s, 'sq', true)}<div class="bd"><div class="cancelTop"><span class="tag cancel">ANNULÉ</span>${why ? `<b>${esc(why)}</b>` : ''}</div><div class="tt">${esc(s)}</div><div class="mm"><span>${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}</div></div></div>`;
   return `<div class="item cours">${subjBadge(s)}<div class="bd"><div class="tt">${esc(s)}</div><div class="mm"><span class="tag cours">${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.room ? `<span>${esc(c.room)}</span>` : ''}${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}${c.status ? `<span class="tag soon">${esc(c.status)}</span>` : ''}</div></div></div>`;
 }
 function evHTML(e) {
@@ -433,7 +434,7 @@ function evHTML(e) {
 
 /* ---------- « Maintenant » : où j'en suis dans ma journée ---------- */
 function daySchedule(d) {
-  const cours = coursOn(d).filter(c => !c.canceled).map(c => ({ kind: 'cours', title: prettySubj(c.subject) || 'Cours', room: c.room, start: new Date(c.starts_at), end: new Date(c.ends_at) }));
+  const cours = coursOn(d).filter(c => !isOff(c)).map(c => ({ kind: 'cours', title: prettySubj(c.subject) || 'Cours', room: c.room, start: new Date(c.starts_at), end: new Date(c.ends_at) }));
   const ev = eventsOn(d).filter(e => !e.allDay).map(e => ({ kind: 'event', title: e.title, room: e.location, start: new Date(e.start), end: new Date(e.end || e.start) }));
   return [...cours, ...ev].sort((a, b) => a.start - b.start);
 }
@@ -442,9 +443,9 @@ function dur(ms) { const m = mins(ms); if (m < 60) return `${m} min`; const h = 
 function nowCardHTML() {
   const now = new Date(), today = startOfDay(now);
   const S = daySchedule(today);
-  const cours = coursOn(today).map(c => ({ kind: 'cours', title: prettySubj(c.subject) || 'Cours', start: new Date(c.starts_at), end: new Date(c.ends_at), off: !!c.canceled })).sort((a, b) => a.start - b.start);
+  const cours = coursOn(today).map(c => ({ kind: 'cours', title: prettySubj(c.subject) || 'Cours', start: new Date(c.starts_at), end: new Date(c.ends_at), off: !!isOff(c) })).sort((a, b) => a.start - b.start);
   const cur = S.find(x => x.start <= now && now < x.end);
-  const canc = coursOn(today).filter(c => c.canceled).map(c => ({ title: prettySubj(c.subject) || 'Cours', start: new Date(c.starts_at), end: new Date(c.ends_at), why: c.status && !/^annul/i.test(c.status) ? c.status : '' }));
+  const canc = coursOn(today).filter(c => isOff(c)).map(c => ({ title: prettySubj(c.subject) || 'Cours', start: new Date(c.starts_at), end: new Date(c.ends_at), why: c.status && !/^annul/i.test(c.status) ? c.status : '' }));
   const freeNow = !cur && canc.find(c => c.start <= now && now < c.end);
   const next = S.find(x => x.start > now);
   const badge = x => x.kind === 'cours' ? subjBadge(x.title) : `<span class="sq" style="background:var(--blue)">${SVG('<rect x="3" y="4" width="18" height="17" rx="4"/><path d="M16 2v4M8 2v4M3 10h18"/>').replace('stroke="currentColor"', 'stroke="#100e0d"')}</span>`;
@@ -468,7 +469,7 @@ function nowCardHTML() {
       <div class="prog"><i style="width:${pct}%"></i></div>`;
   } else if (freeNow) {
     main = `<div class="nowLbl" style="color:#ff8a8a">Libre · cours annulé</div>
-      <div class="nowRow">${subjBadge(freeNow.title)}<div class="nowTxt"><b style="text-decoration:line-through;opacity:.7">${esc(freeNow.title)}</b><span>${freeNow.why ? esc(freeNow.why) + ' · ' : ''}${fmtTime(freeNow.start)} – ${fmtTime(freeNow.end)}</span></div><div class="nowLeft"><b>${dur(freeNow.end - now)}</b><span>de libre</span></div></div>
+      <div class="nowRow">${subjBadge(freeNow.title, 'sq', true)}<div class="nowTxt"><b style="text-decoration:line-through;opacity:.7">${esc(freeNow.title)}</b><span>${freeNow.why ? esc(freeNow.why) + ' · ' : ''}${fmtTime(freeNow.start)} – ${fmtTime(freeNow.end)}</span></div><div class="nowLeft"><b>${dur(freeNow.end - now)}</b><span>de libre</span></div></div>
       ${next && sameDay(next.start, now) ? `<div class="nowNext">Ensuite · <b>${esc(next.title)}</b> à ${fmtTime(next.start)}${next.room ? ' · ' + esc(next.room) : ''}</div>` : ''}`;
   } else if (next && sameDay(next.start, now)) {
     const inMs = next.start - now;
@@ -510,7 +511,7 @@ function rToday() {
 
   const row = (cls, when, inner, sort) => ({ sort, h: `<div class="row ${cls}"><span class="when">${when}</span><span class="node"></span>${inner}</div>` });
   const timed = [
-    ...coursOn(today).filter(c => new Date(c.ends_at) > now).map(c => row(c.canceled ? 'cours off' : 'cours', fmtTime(c.starts_at), coursHTML(c), fmtTime(c.starts_at))),
+    ...coursOn(today).filter(c => new Date(c.ends_at) > now).map(c => row(isOff(c) ? 'cours off' : 'cours', fmtTime(c.starts_at), coursHTML(c), fmtTime(c.starts_at))),
     ...eventsOn(today).filter(e => e.allDay || new Date(e.end || e.start) > now).map(e => row('ev', e.allDay ? 'Journée' : fmtTime(e.start), evHTML(e), e.allDay ? '00:00' : fmtTime(e.start))),
     ...soir.filter(t => daysLeft(t) === 0 && t.time).map(t => row('now', t.time, itemHTML(t), t.time)),
   ].sort((a, b) => a.sort.localeCompare(b.sort));
@@ -523,7 +524,7 @@ function rToday() {
   const subjects = {};
   A.filter(t => t.kind === 'devoir').forEach(t => { (subjects[t.subject || 'Autre'] ||= []).push(t); });
   const subjHTML = Object.entries(subjects).slice(0, 6).map(([k, L]) => { const n = Math.min(...L.map(t => daysLeft(t) ?? 99)); return `<div class="subj">${subjBadge(k, 'sq')}<span>${esc(k)} <small class="muted" style="font-weight:500">· ${L.length}</small></span><b>${n < 0 ? '!' : n === 0 ? 'Auj.' : n === 1 ? 'Dem.' : 'J-' + n}</b></div>`; }).join('');
-  const tomorrowCours = coursOn(addDays(today, 1)).filter(c => !c.canceled);
+  const tomorrowCours = coursOn(addDays(today, 1)).filter(c => !isOff(c));
   v.innerHTML = `<div class="today">
     <div class="colA"><div class="card nowCard" id="nowCard">${nowCardHTML()}</div>${hero}
       <div><div class="h2">Ta journée</div><div class="tl">${rows.join('') || '<div class="empty">Journée tranquille. Rien d\'urgent ni de prévu.</div>'}</div></div>
@@ -625,7 +626,7 @@ function rAgenda() {
   const v = $('#v-agenda'), base = startOfDay(new Date());
   const days = Array.from({ length: 14 }, (_, i) => addDays(base, i));
   const itemsOn = d => [
-    ...coursOn(d).map(c => ({ t: fmtTime(c.starts_at), cls: c.canceled ? 'cours off' : 'cours', h: coursHTML(c) })),
+    ...coursOn(d).map(c => ({ t: fmtTime(c.starts_at), cls: isOff(c) ? 'cours off' : 'cours', h: coursHTML(c) })),
     ...eventsOn(d).map(e => ({ t: e.allDay ? '00:00' : fmtTime(e.start), when: e.allDay ? 'Journée' : fmtTime(e.start), cls: 'ev', h: evHTML(e) })),
     ...allItems().filter(t => t.due === ymd(d)).map(t => ({ t: t.time || '23:58', when: t.time || 'Pour', cls: t.done ? '' : 'now', h: itemHTML(t, { noDue: true }) })),
   ].sort((a, b) => a.t.localeCompare(b.t));
@@ -654,7 +655,7 @@ function snapshotCtx() {
   const A = active().sort(byDue).slice(0, 60).map(t => `- [${t.id}] ${t.title}${t.kind === 'devoir' ? ' (devoir ' + (t.subject || '') + ')' : ''}${t.due ? ' — pour le ' + t.due + (t.time ? ' ' + t.time : '') : ''}${t.repeat ? ' — répétition ' + t.repeat : ''}`).join('\n');
   const days = Array.from({ length: 8 }, (_, i) => addDays(startOfDay(new Date()), i));
   const W = days.map(d => {
-    const c = coursOn(d).map(x => `${fmtTime(x.starts_at)}-${fmtTime(x.ends_at)} ${x.canceled ? 'ANNULÉ (libre) : ' : 'cours de '}${prettySubj(x.subject)}`);
+    const c = coursOn(d).map(x => `${fmtTime(x.starts_at)}-${fmtTime(x.ends_at)} ${isOff(x) ? 'ANNULÉ (libre) : ' : 'cours de '}${prettySubj(x.subject)}`);
     const ev = eventsOn(d).map(e => `${e.allDay ? 'toute la journée' : fmtTime(e.start) + '-' + fmtTime(e.end)} ${e.title} (agenda)`);
     const tot = [...c, ...ev];
     return `${cap(fmtDay(d))} : ${tot.length ? tot.join(' ; ') : 'rien de prévu'}`;
