@@ -413,3 +413,12 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
 .liveDot{width:7px;height:7px;border-radius:50%;background:var(--good,#5be39b);box-shadow:0 0 0 3px color-mix(in srgb,var(--good,#5be39b) 25%,transparent)}
 .iaTop{padding-bottom:6px;min-height:40px}
 .tag.rev{background:#3a2a10;color:#ffb547}
+.sqTxt{font-family:var(--disp);font-weight:900;font-size:13px;letter-spacing:-.3px;color:#100e0d;line-height:1}
+.sqTxt.long{font-size:9.5px;letter-spacing:-.2px}
+.sq.mini .sqTxt{font-size:8.5px}.sq.mini .sqTxt.long{font-size:6px}
+.subj .sq .sqTxt{font-size:14px}
+.sq b.sqTxt{color:#100e0d!important;font-size:13px;font-weight:900}
+.sq b.sqTxt.long{font-size:9.5px}
+.subj .sq b.sqTxt{font-size:14.5px}.subj .sq b.sqTxt.long{font-size:10.5px}
+.sq.mini b.sqTxt{font-size:8.5px}.sq.mini b.sqTxt.long{font-size:6px}
+.sq svg{width:20px;height:20px}.subj .sq svg{width:22px;height:22px}.sq.mini svg{width:13px;height:13px}

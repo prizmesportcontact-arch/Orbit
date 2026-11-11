@@ -70,32 +70,45 @@ function dayTitle(d) {
 }
 
 /* ---------- Matières Pronote ---------- */
-const SUBJ = { 'MATHEMATIQUES': 'Maths', 'FRANCAIS': 'Français', 'ANGLAIS LV1': 'Anglais', 'ANGLAIS LV2': 'Anglais', 'ALLEMAND LV1': 'Allemand', 'ALLEMAND LV2': 'Allemand', 'ESPAGNOL LV1': 'Espagnol', 'ESPAGNOL LV2': 'Espagnol', 'PHYSIQUE-CHIMIE': 'Physique-chimie', 'PHYSIQ.CHIMIE&MATHS': 'Physique-chimie & maths', 'HISTOIRE-GEOGRAPHIE': 'Histoire-géo', 'HISTOIRE & GEOGRAPHIE': 'Histoire-géo', 'ED.PHYSIQUE & SPORT.': 'EPS', 'EPS': 'EPS', 'PHILOSOPHIE': 'Philo', 'SCIENCES ECO.& SOCIAL.': 'SES', 'SC. ECONO.& SOCIALES': 'SES', 'SCIENCES VIE & TERRE': 'SVT', 'ENS. MORAL & CIVIQUE': 'EMC', 'ENSEIGN.SCIENTIFIQUE': 'Enseignement scientifique', 'IT-INNOVATION TECHNOLOGIQUE': 'Innovation techno', 'ENS.TECHNO. EN LV1': 'ETLV', 'NUMERIQUE SC.INFORM.': 'NSI', 'ACCOMPAGNEMT. PERSO': 'Accompagnement perso', 'ACCOMPAGNEMENT PERSO': 'Accompagnement perso', 'VIE DE CLASSE': 'Vie de classe' };
+const SUBJ = { 'MATHEMATIQUES': 'Maths', 'FRANCAIS': 'Français', 'ANGLAIS LV1': 'Anglais', 'ANGLAIS LV2': 'Anglais', 'ALLEMAND LV1': 'Allemand', 'ALLEMAND LV2': 'Allemand', 'ESPAGNOL LV1': 'Espagnol', 'ESPAGNOL LV2': 'Espagnol', 'PHYSIQUE-CHIMIE': 'Physique-chimie', 'PHYSIQ.CHIMIE&MATHS': 'Physique-chimie & maths', 'HISTOIRE-GEOGRAPHIE': 'Histoire-géo', 'HISTOIRE & GEOGRAPHIE': 'Histoire-géo', 'ED.PHYSIQUE & SPORT.': 'EPS', 'EPS': 'EPS', 'PHILOSOPHIE': 'Philo', 'SCIENCES ECO.& SOCIAL.': 'SES', 'SC. ECONO.& SOCIALES': 'SES', 'SCIENCES VIE & TERRE': 'SVT', 'ENS. MORAL & CIVIQUE': 'EMC', 'ENSEIGN.SCIENTIFIQUE': 'Enseignement scientifique', 'IT-INNOVATION TECHNOLOGIQUE': 'Innovation techno', 'ENS.TECHNO. EN LV1': 'ETLV', 'INGENIER.&DEV.DURAB.': 'I2D', 'INGENIERIE & DEV. DURABLE': 'I2D', 'NUMERIQUE SC.INFORM.': 'NSI', 'ACCOMPAGNEMT. PERSO': 'Accompagnement perso', 'ACCOMPAGNEMENT PERSO': 'Accompagnement perso', 'VIE DE CLASSE': 'Vie de classe' };
 function prettySubj(s) { if (!s) return null; const u = String(s).trim().toUpperCase(), k = u.replace(/\s*\d+$/, '').replace(/\s+LV$/, ''); if (SUBJ[u]) return SUBJ[u]; if (SUBJ[k]) return SUBJ[k]; return k.toLowerCase().replace(/(^|[\s\-'.&(])([a-zà-ÿ])/g, (m, a, b) => a + b.toUpperCase()); }
 const COLORS = ['#ff6a47', '#ffb23f', '#6f9bff', '#4fd1a5', '#c58cff', '#ff8fb1', '#e8c48a', '#7fd3ff'];
-const SUBJ_ICONS = [
-  [/math|algèbre|géom/i, '<path d="M18 5V4H6l6 8-6 8h12v-1"/>'],
-  [/physique|chimie/i, '<path d="M9 3h6M10 3v6L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9V3"/><path d="M7.5 15h9"/>'],
-  [/svt|vie|terre|bio/i, '<path d="M11 20A7 7 0 0 1 4 13c0-6 6-9 16-9 0 10-3 16-9 16z"/><path d="M4 21c4-4 7-7 10-10"/>'],
-  [/français|littér|lettres/i, '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'],
-  [/philo/i, '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>'],
-  [/anglais|allemand|espagnol|italien|chinois|latin|grec|langue|etlv|lv\d/i, '<path d="M21 12a8 8 0 0 1-11.8 7L3 21l2-6.2A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>'],
-  [/histoire|géo|geo/i, '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'],
-  [/eps|sport/i, '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'],
-  [/ses|éco|eco|gestion/i, '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>'],
-  [/techno|innovation|nsi|info|numérique|si\b|ingénie/i, '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>'],
-  [/musique/i, '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'],
-  [/art|dessin|plast/i, '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="16" cy="10" r="1.2"/>'],
-  [/emc|moral|civique/i, '<path d="M12 3v18M6 7h12M6 7l-3 7a3.5 3.5 0 0 0 6 0zM18 7l-3 7a3.5 3.5 0 0 0 6 0z"/>'],
-  [/scientifique|science/i, '<circle cx="12" cy="12" r="2"/><path d="M12 2c3 3 3 17 0 20M12 2c-3 3-3 17 0 20M2 12c3-3 17-3 20 0M2 12c3 3 17 3 20 0"/>'],
+/* Chaque matière a SA couleur et SON icône (les langues : leurs lettres) — l'ordre compte */
+const SUBJECTS = [
+  [/physique.*math|chimie.*math/i, '#a77bff', '<circle cx="12" cy="12" r="1.6"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(-60 12 12)"/>'],
+  [/math|algèbre|géom/i, '#4d8dff', '<path d="M7 4v6M4 7h6M14 7h6M5 15l4 4M9 15l-4 4M14 15h6M14 19h6"/>'],
+  [/physique|chimie/i, '#b58cff', '<path d="M9 3h6M10 3v6L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9V3"/><path d="M7.5 15h9"/>'],
+  [/vie de classe/i, '#ffb3a0', '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.8.3 5 2.6 5 5.8"/>'],
+  [/svt|biolog|sciences vie/i, '#3ecf7a', '<path d="M11 20A7 7 0 0 1 4 13c0-6 6-9 16-9 0 10-3 16-9 16z"/><path d="M4 21c4-4 7-7 10-10"/>'],
+  [/français|littér|lettres/i, '#ff5c5c', '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'],
+  [/philo/i, '#ffe08a', '<path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/>'],
+  [/etlv|techno.*anglais|ens\.?techno/i, '#2fe0c0', 'ETLV'],
+  [/anglais/i, '#3ad0ff', 'EN'],
+  [/allemand/i, '#ffd23f', 'DE'],
+  [/espagnol/i, '#ff8a3d', 'ES'],
+  [/italien/i, '#7ee04f', 'IT'],
+  [/latin/i, '#e8c48a', 'LA'],
+  [/histoire|géo|geo/i, '#d4a373', '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'],
+  [/eps|sport/i, '#ff6fb5', '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>'],
+  [/ingénier|ingenier|i2d|dév.*durab|dev.*durab/i, '#7ee04f', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>'],
+  [/innovation|^it\b|it-/i, '#ff9f43', '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>'],
+  [/nsi|numérique|informatique/i, '#22d3ee', '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6M14 4l-4 16"/>'],
+  [/ses|éco|eco|gestion/i, '#f5b8ff', '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>'],
+  [/accompagn|aide perso|soutien/i, '#9fc1d9', '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>'],
+  [/emc|moral|civique/i, '#f4a3ff', '<path d="M12 3v18M6 7h12M6 7l-3 7a3.5 3.5 0 0 0 6 0zM18 7l-3 7a3.5 3.5 0 0 0 6 0z"/>'],
+  [/scientifique|science/i, '#7dd3fc', '<circle cx="12" cy="12" r="2"/><path d="M12 2c3 3 3 17 0 20M12 2c-3 3-3 17 0 20M2 12c3-3 17-3 20 0M2 12c3 3 17 3 20 0"/>'],
+  [/musique/i, '#ffcf5c', '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'],
+  [/art|dessin|plast/i, '#ff7a90', '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="16" cy="10" r="1.2"/>'],
 ];
+const subjDef = name => SUBJECTS.find(([re]) => re.test(name || ''));
 function subjIcon(name, size = 18) {
-  const p = (SUBJ_ICONS.find(([re]) => re.test(name || '')) || [, '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/>'])[1];
+  const d = subjDef(name), p = d ? d[2] : '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/>';
+  if (!p.startsWith('<')) return `<b class="sqTxt${p.length > 2 ? ' long' : ''}">${p}</b>`;
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#100e0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 }
 const subjBadge = (name, cls = 'sq', off = false) => `<span class="${cls}${off ? ' off' : ''}" style="background:${off ? '#5b5653' : subjColor(name)}" title="${esc(name || '')}">${subjIcon(name)}</span>`;
 const isOff = c => !!c && (c.canceled || /absent|annul|supprim|pas de prof/i.test(c.status || ''));
-function subjColor(name) { let h = 0; for (const c of String(name || '?')) h = (h * 31 + c.charCodeAt(0)) | 0; return COLORS[Math.abs(h) % COLORS.length]; }
+function subjColor(name) { const d = subjDef(name); if (d) return d[1]; let h = 0; for (const c of String(name || '?')) h = (h * 31 + c.charCodeAt(0)) | 0; return COLORS[Math.abs(h) % COLORS.length]; }
 const decode = s => { const t = document.createElement('textarea'); t.innerHTML = String(s ?? ''); return t.value; };
 
 /* Devoirs Pronote affichés comme des tâches (ils vivent sur le serveur) */
