@@ -492,34 +492,45 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
 
 /* ================= Style Liquid Glass (réglage) ================= */
 .bgFx{display:none}
-body.glass .bgFx{display:block;position:fixed;inset:-20%;z-index:-1;pointer-events:none;filter:blur(60px) saturate(140%);opacity:.9}
-body.glass .bgFx i{position:absolute;border-radius:50%;animation:blob 26s ease-in-out infinite alternate}
-body.glass .bgFx i:nth-child(1){width:55vmax;height:55vmax;left:-5%;top:-10%;background:radial-gradient(circle,color-mix(in srgb,var(--acc) 75%,transparent),transparent 65%)}
-body.glass .bgFx i:nth-child(2){width:50vmax;height:50vmax;right:-10%;top:20%;background:radial-gradient(circle,#3d6bffbb,transparent 65%);animation-duration:32s}
-body.glass .bgFx i:nth-child(3){width:45vmax;height:45vmax;left:20%;bottom:-15%;background:radial-gradient(circle,#b14dffaa,transparent 65%);animation-duration:38s}
-@keyframes blob{0%{transform:translate(0,0) scale(1)}50%{transform:translate(8vmax,6vmax) scale(1.15)}100%{transform:translate(-6vmax,10vmax) scale(.95)}}
-html.glass{background:#030203}
+html.glass{background:#020103}
 html.glass body{background:transparent}
-body.glass .app,body.glass .main{background:transparent}
-body.glass{--card:rgba(255,255,255,.07);--card2:rgba(255,255,255,.08);--panel:rgba(18,16,20,.55);--line:rgba(255,255,255,.12)}
-body.glass .card,body.glass .hero,body.glass .nowCard,body.glass .view>.list>.item,body.glass .list>.item,body.glass .tl .item,body.glass .msg.a,body.glass .seg,body.glass .chipsRow>span,body.glass .dayBar,body.glass details.fold,body.glass .week .day{
-  background:linear-gradient(160deg,rgba(255,255,255,.12),rgba(255,255,255,.04));
-  -webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);
-  border:1px solid rgba(255,255,255,.14);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.04),0 10px 30px -12px rgba(0,0,0,.6)}
-body.glass .card .item,body.glass .card .list>.item{background:rgba(255,255,255,.06);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.08)}
-body.glass .rail,body.glass .tabbar,body.glass .sheet,body.glass .view.iaV .chatin{
-  background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.05))!important;
-  -webkit-backdrop-filter:blur(28px) saturate(190%);backdrop-filter:blur(28px) saturate(190%);
-  border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 12px 40px -10px rgba(0,0,0,.7)}
-body.glass .tabbar{border-radius:30px;left:12px;right:12px;bottom:calc(10px + var(--safeB));height:72px;padding:8px 10px;border-top:1px solid rgba(255,255,255,.16)}
-body.glass .sheet{background:linear-gradient(160deg,rgba(40,36,44,.75),rgba(20,18,22,.8))!important}
-body.glass .capture form{background:rgba(255,255,255,.88);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 #fff,0 10px 30px -10px rgba(0,0,0,.6)}
-body.glass .item.cours.canceled{background:linear-gradient(160deg,rgba(255,80,90,.16),rgba(255,80,90,.05))}
-body.glass .nav .pill,body.glass .seg .pill{background:rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
-body.glass .btn:not(.p){background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14)}
-body.glass .msg.u{box-shadow:0 8px 24px -8px color-mix(in srgb,var(--acc) 70%,transparent)}
-body.glass .fBg{background:radial-gradient(80% 60% at 50% 30%,color-mix(in srgb,var(--acc) 35%,transparent),transparent 70%),rgba(3,2,3,.85);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px)}
+body.glass .bgFx{display:block;position:fixed;inset:-25%;z-index:-1;pointer-events:none;filter:blur(70px) saturate(160%)}
+body.glass .bgFx i{position:absolute;border-radius:50%;animation:blob 28s ease-in-out infinite alternate;opacity:.95}
+body.glass .bgFx i:nth-child(1){width:50vmax;height:50vmax;left:0;top:-5%;background:radial-gradient(circle,var(--acc),transparent 62%)}
+body.glass .bgFx i:nth-child(2){width:46vmax;height:46vmax;right:-4%;top:18%;background:radial-gradient(circle,#2f6bff,transparent 62%);animation-duration:34s}
+body.glass .bgFx i:nth-child(3){width:42vmax;height:42vmax;left:22%;bottom:-8%;background:radial-gradient(circle,#a33dff,transparent 62%);animation-duration:40s}
+body.glass .bgFx i:nth-child(4){width:30vmax;height:30vmax;left:55%;top:55%;background:radial-gradient(circle,#00d9b5,transparent 62%);animation-duration:31s;animation-direction:alternate-reverse}
+body.glass .bgFx i:nth-child(5){width:26vmax;height:26vmax;left:8%;top:48%;background:radial-gradient(circle,#ff3d9a,transparent 62%);animation-duration:37s;animation-direction:alternate-reverse}
+body.glass .bgFx:after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 30%,rgba(2,1,3,.55) 100%)}
+@keyframes blob{0%{transform:translate(0,0) scale(1)}50%{transform:translate(9vmax,7vmax) scale(1.2)}100%{transform:translate(-7vmax,11vmax) scale(.9)}}
+body.glass{--card:rgba(255,255,255,.06);--card2:rgba(255,255,255,.08);--panel:rgba(20,18,26,.5);--line:rgba(255,255,255,.14)}
+
+/* Le verre : flou + saturation + éclat, bord lumineux biseauté, reflet spéculaire et ombre portée */
+body.glass :is(.card,.hero,.nowCard,.view>.list>.item,.dayHead+.list>.item,.tl .item,.msg.a,.seg,.chipsRow>span,details.fold,.week .day,.rail,.tabbar,.sheet,.view.iaV .chatin,.iaBottom .sugg button,.btn:not(.p),.iconbtn,.nHero,.toast){
+  isolation:isolate;border:0!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.17),rgba(255,255,255,.05) 38%,rgba(255,255,255,.02) 62%,rgba(255,255,255,.09))!important;
+  -webkit-backdrop-filter:blur(26px) saturate(220%) brightness(1.15);backdrop-filter:blur(26px) saturate(220%) brightness(1.15);
+  box-shadow:inset 0 1.5px 1px -.5px rgba(255,255,255,.7),inset 0 -1px 1px rgba(255,255,255,.12),inset 0 0 22px rgba(255,255,255,.07),inset 0 -14px 26px -16px rgba(0,0,0,.45),0 22px 44px -20px rgba(0,0,0,.85)}
+body.glass :is(.card,.hero,.nowCard,.view>.list>.item,.dayHead+.list>.item,.tl .item,.msg.a,.seg,.chipsRow>span,details.fold,.week .day,.rail,.tabbar,.sheet,.view.iaV .chatin,.iaBottom .sugg button,.btn:not(.p),.iconbtn,.nHero,.toast)::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.3px;pointer-events:none;z-index:-1;
+  background:linear-gradient(145deg,rgba(255,255,255,.85),rgba(255,255,255,.18) 26%,rgba(255,255,255,0) 48%,rgba(255,255,255,.08) 72%,rgba(255,255,255,.55));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+body.glass :is(.card,.hero,.nowCard,.view>.list>.item,.dayHead+.list>.item,.tl .item,.msg.a,.seg,.chipsRow>span,details.fold,.week .day,.rail,.tabbar,.sheet,.view.iaV .chatin,.iaBottom .sugg button,.btn:not(.p),.iconbtn,.nHero,.toast)::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
+  background:radial-gradient(130% 70% at 12% -18%,rgba(255,255,255,.28),transparent 52%),radial-gradient(90% 60% at 105% 125%,color-mix(in srgb,var(--acc) 30%,transparent),transparent 62%),linear-gradient(180deg,rgba(255,255,255,.06),transparent 35%)}
+body.glass :is(.card,.hero,.nowCard,.view>.list>.item,.dayHead+.list>.item,.tl .item,.msg.a,.chipsRow>span,details.fold,.week .day,.rail,.view.iaV .chatin,.iaBottom .sugg button,.btn:not(.p),.iconbtn,.nHero,.toast){position:relative}
+/* éléments imbriqués : verre plus fin pour garder la lisibilité */
+body.glass .card .item,body.glass .card .list>.item,body.glass .nList .nRow{background:rgba(255,255,255,.055);-webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid rgba(255,255,255,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.14)}
+body.glass .item.cours.canceled{background:linear-gradient(135deg,rgba(255,70,90,.26),rgba(255,70,90,.06))!important}
+body.glass .msg.u{background:linear-gradient(160deg,color-mix(in srgb,var(--acc) 92%,#fff),var(--acc));box-shadow:inset 0 1px 1px rgba(255,255,255,.6),0 10px 26px -8px color-mix(in srgb,var(--acc) 75%,transparent)}
+/* boutons principaux : gélule brillante */
+body.glass .btn.p,body.glass .capture .go,body.glass .tabbar .plus,body.glass .view.iaV .chatin button:not(.mic){background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 70%,#fff),var(--acc) 55%,color-mix(in srgb,var(--acc) 80%,#000))!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.8),inset 0 -2px 4px rgba(0,0,0,.2),0 10px 24px -8px color-mix(in srgb,var(--acc) 80%,transparent)}
+/* barres de navigation flottantes + pastille « loupe » */
+body.glass .tabbar{border-radius:32px;left:12px;right:12px;bottom:calc(10px + var(--safeB));height:72px;padding:8px 10px}
+body.glass .nav .pill,body.glass .tabbar .pill,body.glass .seg .pill{background:linear-gradient(180deg,rgba(255,255,255,.32),rgba(255,255,255,.1));box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -1px 2px rgba(0,0,0,.2),0 6px 16px -6px rgba(0,0,0,.6)}
+body.glass .sheet{background:linear-gradient(160deg,rgba(60,56,70,.55),rgba(20,18,24,.7))!important;-webkit-backdrop-filter:blur(40px) saturate(200%);backdrop-filter:blur(40px) saturate(200%)}
+body.glass .capture form{background:linear-gradient(180deg,rgba(255,255,255,.95),rgba(255,255,255,.8));-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 #fff,inset 0 -2px 6px rgba(0,0,0,.08),0 14px 34px -12px rgba(0,0,0,.7)}
+body.glass .sq{box-shadow:inset 0 1px 1px rgba(255,255,255,.7),inset 0 -2px 4px rgba(0,0,0,.18),0 8px 20px -6px var(--sc,transparent)}
+body.glass .fBg{background:radial-gradient(80% 60% at 50% 30%,color-mix(in srgb,var(--acc) 35%,transparent),transparent 70%),rgba(2,1,3,.7);-webkit-backdrop-filter:blur(40px) saturate(180%);backdrop-filter:blur(40px) saturate(180%)}
+body.glass .dayBar i:not(.done):not(.cur):not(.off){background:rgba(255,255,255,.14)}
 @media (max-width:899px){ body.glass .view{padding-bottom:calc(120px + var(--safeB))} }
 .swatches.styles{gap:10px}
 .styleOpt{flex:1;height:64px;border-radius:16px;border:2px solid transparent;font-weight:800;font-size:13px;color:var(--txt);display:flex;align-items:flex-end;padding:9px 11px;position:relative;overflow:hidden}
@@ -527,3 +538,5 @@ body.glass .fBg{background:radial-gradient(80% 60% at 50% 30%,color-mix(in srgb,
 .styleOpt[data-s="profond"]{background:linear-gradient(150deg,#1a1716,#050404)}
 .styleOpt[data-s="glass"]{background:radial-gradient(circle at 20% 20%,color-mix(in srgb,var(--acc) 80%,transparent),transparent 55%),radial-gradient(circle at 85% 70%,#3d6bffcc,transparent 55%),#0a0812}
 .styleOpt[data-s="glass"]:after{content:"";position:absolute;inset:14px 14px 30px;border-radius:10px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(6px)}
+body.glass .tabbar .pill{top:12px}
+body.glass .nav button.on,body.glass .tabbar button.on{color:#fff;filter:drop-shadow(0 0 6px rgba(255,255,255,.5))}
