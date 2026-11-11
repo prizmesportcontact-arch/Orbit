@@ -540,3 +540,7 @@ body.glass .dayBar i:not(.done):not(.cur):not(.off){background:rgba(255,255,255,
 .styleOpt[data-s="glass"]:after{content:"";position:absolute;inset:14px 14px 30px;border-radius:10px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(6px)}
 body.glass .tabbar .pill{top:12px}
 body.glass .nav button.on,body.glass .tabbar button.on{color:#fff;filter:drop-shadow(0 0 6px rgba(255,255,255,.5))}
+.examCard{padding:14px;margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
+.exTop{display:flex;align-items:center;gap:12px}
+.examCard .list{display:flex;flex-direction:column;gap:8px}
+.examCard .item{padding:10px 12px}

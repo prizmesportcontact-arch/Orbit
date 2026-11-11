@@ -140,7 +140,7 @@ function revisionItems() {
     const day = ymd(addDays(new Date(x.due + 'T12:00:00'), -n)), id = `rv:${x.id}:${n}`;
     if (day < today && !done.has(id)) continue; // séance passée : on ne la compte pas en retard
     const at = new Date(day + 'T18:00:00');
-    out.push({ id, kind: 'revision', source: 'revision', subject: x.subject, due: day, time: '18:00', title: `Réviser ${x.subject} · contrôle ${n === 1 ? 'demain' : 'dans ' + n + ' j'}`,
+    out.push({ id, kind: 'revision', source: 'revision', examId: x.id, examDue: x.due, examWhat: x.what, subject: x.subject, due: day, time: '18:00', title: `Réviser ${x.subject} · contrôle ${n === 1 ? 'demain' : 'dans ' + n + ' j'}`,
       note: `Séance ${4 - n}/3, 30-45 min.\nContrôle le ${fmtDay(new Date(x.due + 'T12:00:00'))} : ${x.what}`, done: done.has(id), reminders: [{ at: at.toISOString(), label: 'Révision', fired: at <= new Date() }] });
   }
   return out;
@@ -750,7 +750,11 @@ const MIC_SVG = SVG('<rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5
 
 function rHomework() {
   const v = $('#v-devoirs');
-  const H = allItems().filter(t => (t.kind === 'devoir' || t.kind === 'revision') && !t.done).sort(byDue);
+  const H = allItems().filter(t => t.kind === 'devoir' && !t.done).sort(byDue);
+  // Séances de révision : à part, regroupées par contrôle (sinon on croit à un devoir « pour dimanche »)
+  const R = allItems().filter(t => t.kind === 'revision' && !t.done).sort(byDue), exams = new Map();
+  for (const t of R) { if (!exams.has(t.examId)) exams.set(t.examId, []); exams.get(t.examId).push(t); }
+  const revHTML = exams.size ? `<div class="dayHead"><b>Contrôles</b><span>révisions proposées</span></div>` + [...exams.values()].map(L => { const e = L[0], d = new Date(e.examDue + 'T12:00'); return `<div class="card examCard"><div class="exTop">${subjBadge(e.subject)}<div class="nTx"><b>Contrôle de ${esc(e.subject)}</b><small>${esc(cap(fmtDay(d)))} · ${esc(e.examWhat.slice(0, 90))}</small></div></div><div class="list">${L.map(t => itemHTML({ ...t, title: 'Révision ' + (4 - +t.id.split(':').pop()) + '/3' }, { noSq: true, noRem: true })).join('')}</div></div>`; }).join('') : '';
   const subjects = [...new Set(H.map(t => t.subject || 'Autre'))];
   const groups = new Map(); for (const t of H) { const k = daysLeft(t) < 0 ? 'late' : t.due || 'none'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
   let list = '';
@@ -762,7 +766,7 @@ function rHomework() {
   const bindSeg = () => { v.querySelectorAll('#hwSeg button').forEach(b => b.onclick = () => { hwTab = b.dataset.h; rHomework(); if (hwTab === 'notes') loadNotes(); }); segPill('#hwSeg'); };
   if (hwTab === 'notes') { v.innerHTML = seg + notesHTML(); bindSeg(); const na = $('#nAsk'); if (na) na.onclick = () => { go('ia'); ask('Regarde mes notes et dis-moi dans quelles matières je dois bosser en priorité, avec un plan concret pour cette semaine.'); }; return; }
   v.innerHTML = seg + `${subjects.length ? `<div class="chipsRow" style="margin-bottom:6px">${subjects.map(s => `<span>${subjBadge(s, 'sq mini')}${esc(s)} · ${H.filter(t => (t.subject || 'Autre') === s).length}</span>`).join('')}</div>` : ''}
-    ${list || '<div class="empty" style="margin-top:12px">Aucun devoir à faire 🎉</div>'}
+    ${list || '<div class="empty" style="margin-top:12px">Aucun devoir à faire 🎉</div>'}${revHTML}
     <div class="grid" style="margin-top:26px">${pronoteCardHTML()}
       <details class="fold"><summary>＋ Import manuel (copier-coller ou capture)</summary>
         <div class="steps"><div>Pronote → <b>Cahier de textes</b> → <b>Travail à faire</b>.</div><div>Colle le texte ou dépose une capture d'écran.</div></div>
