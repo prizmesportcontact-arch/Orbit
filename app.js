@@ -4,6 +4,7 @@
    ========================================================= */
 'use strict';
 const API = 'https://cbbnrdfvaaikawszaysu.supabase.co/functions/v1/orbit-api';
+const EXTRA = 'https://cbbnrdfvaaikawszaysu.supabase.co/functions/v1/orbit-extra';
 const $ = s => document.querySelector(s);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -34,7 +35,7 @@ const REPEATS = { '': 'Jamais', daily: 'Tous les jours', weekdays: 'En semaine (
 /* ---------- État ---------- */
 let key = store.get('orbit.key', null);
 let tasks = store.get('orbit.tasks', []);
-let settings = Object.assign({ accent: 'corail', intensite: 'normal', pronoteDone: [], revDone: [] }, store.get('orbit.settings', {}));
+let settings = Object.assign({ accent: 'corail', style: 'profond', intensite: 'normal', pronoteDone: [], revDone: [] }, store.get('orbit.settings', {}));
 let server = store.get('orbit.server', { devoirs: [], cours: [], gcal: [], pronote: {}, flags: {} });
 let lastSince = store.get('orbit.since', null);
 let outbox = store.get('orbit.outbox', { put: {}, del: [], settings: false });
@@ -75,27 +76,27 @@ function prettySubj(s) { if (!s) return null; const u = String(s).trim().toUpper
 const COLORS = ['#ff6a47', '#ffb23f', '#6f9bff', '#4fd1a5', '#c58cff', '#ff8fb1', '#e8c48a', '#7fd3ff'];
 /* Chaque matière a SA couleur et SON icône (les langues : leurs lettres) — l'ordre compte */
 const SUBJECTS = [
-  [/physique.*math|chimie.*math/i, '#a77bff', '<circle cx="12" cy="12" r="1.6"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(-60 12 12)"/>'],
-  [/math|algèbre|géom/i, '#4d8dff', '<path d="M7 4v6M4 7h6M14 7h6M5 15l4 4M9 15l-4 4M14 15h6M14 19h6"/>'],
-  [/physique|chimie/i, '#b58cff', '<path d="M9 3h6M10 3v6L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9V3"/><path d="M7.5 15h9"/>'],
-  [/vie de classe/i, '#ffb3a0', '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.8.3 5 2.6 5 5.8"/>'],
-  [/svt|biolog|sciences vie/i, '#3ecf7a', '<path d="M11 20A7 7 0 0 1 4 13c0-6 6-9 16-9 0 10-3 16-9 16z"/><path d="M4 21c4-4 7-7 10-10"/>'],
-  [/français|littér|lettres/i, '#ff5c5c', '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'],
+  [/physique.*math|chimie.*math/i, '#8f5bff', '<circle cx="12" cy="12" r="1.6"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(-60 12 12)"/>'],
+  [/math|algèbre|géom/i, '#3b7bff', '<path d="M7 4v6M4 7h6M14 7h6M5 15l4 4M9 15l-4 4M14 15h6M14 19h6"/>'],
+  [/physique|chimie/i, '#a36bff', '<path d="M9 3h6M10 3v6L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9V3"/><path d="M7.5 15h9"/>'],
+  [/vie de classe/i, '#ff8f6b', '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.8.3 5 2.6 5 5.8"/>'],
+  [/svt|biolog|sciences vie/i, '#1fd67a', '<path d="M11 20A7 7 0 0 1 4 13c0-6 6-9 16-9 0 10-3 16-9 16z"/><path d="M4 21c4-4 7-7 10-10"/>'],
+  [/français|littér|lettres/i, '#ff3b4e', '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'],
   [/philo/i, '#ffe08a', '<path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/>'],
-  [/etlv|techno.*anglais|ens\.?techno/i, '#2fe0c0', 'ETLV'],
-  [/anglais/i, '#3ad0ff', 'EN'],
-  [/allemand/i, '#ffd23f', 'DE'],
+  [/etlv|techno.*anglais|ens\.?techno/i, '#00d9b5', 'ETLV'],
+  [/anglais/i, '#00b4ff', 'EN'],
+  [/allemand/i, '#ffc800', 'DE'],
   [/espagnol/i, '#ff8a3d', 'ES'],
-  [/italien/i, '#7ee04f', 'IT'],
+  [/italien/i, '#62dc1e', 'IT'],
   [/latin/i, '#e8c48a', 'LA'],
-  [/histoire|géo|geo/i, '#d4a373', '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'],
-  [/eps|sport/i, '#ff6fb5', '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>'],
-  [/ingénier|ingenier|i2d|dév.*durab|dev.*durab/i, '#7ee04f', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>'],
-  [/innovation|^it\b|it-/i, '#ff9f43', '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>'],
+  [/histoire|géo|geo/i, '#d9944a', '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'],
+  [/eps|sport/i, '#ff3d9a', '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>'],
+  [/ingénier|ingenier|i2d|dév.*durab|dev.*durab/i, '#62dc1e', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>'],
+  [/innovation|^it\b|it-/i, '#ff8800', '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>'],
   [/nsi|numérique|informatique/i, '#22d3ee', '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6M14 4l-4 16"/>'],
   [/ses|éco|eco|gestion/i, '#f5b8ff', '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>'],
-  [/accompagn|aide perso|soutien/i, '#9fc1d9', '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>'],
-  [/emc|moral|civique/i, '#f4a3ff', '<path d="M12 3v18M6 7h12M6 7l-3 7a3.5 3.5 0 0 0 6 0zM18 7l-3 7a3.5 3.5 0 0 0 6 0z"/>'],
+  [/accompagn|aide perso|soutien/i, '#7fb2e0', '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>'],
+  [/emc|moral|civique/i, '#e266ff', '<path d="M12 3v18M6 7h12M6 7l-3 7a3.5 3.5 0 0 0 6 0zM18 7l-3 7a3.5 3.5 0 0 0 6 0z"/>'],
   [/scientifique|science/i, '#7dd3fc', '<circle cx="12" cy="12" r="2"/><path d="M12 2c3 3 3 17 0 20M12 2c-3 3-3 17 0 20M2 12c3-3 17-3 20 0M2 12c3 3 17 3 20 0"/>'],
   [/musique/i, '#ffcf5c', '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'],
   [/art|dessin|plast/i, '#ff7a90', '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="16" cy="10" r="1.2"/>'],
@@ -106,7 +107,7 @@ function subjIcon(name, size = 18) {
   if (!p.startsWith('<')) return `<b class="sqTxt${p.length > 2 ? ' long' : ''}">${p}</b>`;
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#100e0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 }
-const subjBadge = (name, cls = 'sq', off = false) => `<span class="${cls}${off ? ' off' : ''}" style="background:${off ? '#5b5653' : subjColor(name)}" title="${esc(name || '')}">${subjIcon(name)}</span>`;
+const subjBadge = (name, cls = 'sq', off = false) => `<span class="${cls}${off ? ' off' : ''}" style="background-color:${off ? '#5b5653' : subjColor(name)};--sc:${off ? 'transparent' : subjColor(name) + '99'}" title="${esc(name || '')}">${subjIcon(name)}</span>`;
 const isOff = c => !!c && (c.canceled || /absent|annul|supprim|pas de prof/i.test(c.status || ''));
 function subjColor(name) { const d = subjDef(name); if (d) return d[1]; let h = 0; for (const c of String(name || '?')) h = (h * 31 + c.charCodeAt(0)) | 0; return COLORS[Math.abs(h) % COLORS.length]; }
 const decode = s => { const t = document.createElement('textarea'); t.innerHTML = String(s ?? ''); return t.value; };
@@ -182,6 +183,12 @@ function nextOccurrence(t) {
 async function api(action, body = {}) {
   const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-orbit-app': key || '' }, body: JSON.stringify({ action, ...body }) });
   if (r.status === 401) { const e = new Error('Code d\'accès incorrect'); e.code = 401; throw e; }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Serveur injoignable');
+  return j;
+}
+async function extra(action, body = {}) {
+  const r = await fetch(EXTRA, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-orbit-app': key || '' }, body: JSON.stringify({ action, ...body }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || 'Serveur injoignable');
   return j;
@@ -359,6 +366,7 @@ function localParse(text) {
 /* ---------- Saisie rapide ---------- */
 let pendingList = [];
 const GO_HTML = `${ICON.plus}<span>Ajouter</span>`;
+$('#capMic').onclick = e => toggleVoice(e.currentTarget, $('#capIn'));
 $('#capForm').addEventListener('submit', async e => {
   e.preventDefault();
   const text = $('#capIn').value.trim(); if (!text) return;
@@ -439,7 +447,15 @@ function setHeader() {
     $('#title').textContent = TABS.find(t => t[0] === current)[1];
     $('#date').textContent = cap(fmtDay(d));
   }
+  fitTitle();
 }
+// Le grand titre rétrécit pour toujours tenir à côté des boutons (« Dimanche 15 » sur téléphone)
+function fitTitle() {
+  const h = $('#title'); h.style.fontSize = '';
+  let fs = parseFloat(getComputedStyle(h).fontSize), n = 0;
+  while (h.scrollWidth > h.clientWidth + 1 && fs > 26 && n++ < 40) { fs -= 2; h.style.fontSize = fs + 'px'; }
+}
+addEventListener('resize', () => fitTitle());
 
 /* ---------- Rendu ---------- */
 function itemHTML(t, opts = {}) {
@@ -559,7 +575,7 @@ function rToday() {
       <div class="info"><span class="pillTag">${esc(next.subject || (next.kind === 'devoir' ? 'Devoir' : next.kind === 'rdv' ? 'Rendez-vous' : 'Tâche'))}${next.source === 'pronote' ? ' · Pronote' : ''}</span>
         <span class="ttl">${esc(next.title)}</span>
         <span class="meta">${rem.length ? 'Rappels : ' + rem.map(x => new Date(x.at).toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '') + ' ' + fmtTime(x.at)).join(' · ') : 'Échéance : ' + fmtDay(dueDate(next))}</span>
-        <div class="btns"><button class="btn p" id="heroDone">Marquer fait</button>${next.source === 'pronote' || next.source === 'revision' ? '' : '<button class="btn" id="heroLater">Reporter</button>'}</div></div></div>`;
+        <div class="btns"><button class="btn p" id="heroDone">Marquer fait</button><button class="btn" id="heroFocus">▶ Focus</button>${next.source === 'pronote' || next.source === 'revision' ? '' : '<button class="btn" id="heroLater">Reporter</button>'}</div></div></div>`;
   } else hero = `<div class="hero"><div class="info"><span class="ttl">Rien à l'horizon 🙌</span><span class="meta">Ajoute une tâche avec le + ou connecte Pronote.</span></div></div>`;
 
   const row = (cls, when, inner, sort) => ({ sort, h: `<div class="row ${cls}"><span class="when">${when}</span><span class="node"></span>${inner}</div>` });
@@ -594,6 +610,7 @@ function rToday() {
   bindList(v);
   if (next) {
     $('#heroDone').onclick = () => completeTask(next, true);
+    $('#heroFocus').onclick = () => startFocus(next);
     const hl = $('#heroLater'); if (hl) hl.onclick = () => { const d = addDays(dueDate(next), 1); const nt = { ...next, due: ymd(d) }; nt.reminders = buildReminders(nt); saveTask(nt); toast('Reporté', 'au ' + fmtDay(d)); };
   }
   const br = $('#brief'); if (br) br.onclick = dailyBrief;
@@ -625,6 +642,112 @@ function rTasks() {
 }
 function segPill(sel) { requestAnimationFrame(() => { const s = $(sel); if (!s) return; const on = s.querySelector('button.on'), p = s.querySelector('.pill'); if (on) { p.style.width = on.offsetWidth + 'px'; p.style.transform = `translateX(${on.offsetLeft}px)`; p.style.left = '0'; } }); }
 
+/* ---------- Notes Pronote ---------- */
+let notes = store.get('orbit.notes', null), hwTab = 'devoirs';
+async function loadNotes() {
+  try { const r = await extra('notes'); if (r.notes) { notes = r.notes; store.set('orbit.notes', notes); if (current === 'devoirs' && hwTab === 'notes') rHomework(); } } catch { /* hors ligne */ }
+}
+const num = v => typeof v === 'number' ? v : null;
+const on20 = (v, out) => num(v) == null ? null : v * 20 / (num(out) || 20);
+const gradeCls = v => v == null ? '' : v >= 14 ? 'g4' : v >= 12 ? 'g3' : v >= 10 ? 'g2' : v >= 8 ? 'g1' : 'g0';
+const fmtN = v => num(v) == null ? (v ?? '—') : String(Math.round(v * 100) / 100).replace('.', ',');
+function subjParts(name) { const [m, ...rest] = String(name || '').split(' > '); const main = prettySubj(m) || m; const sub = rest.join(' › ').replace(/"/g, '').trim(); return { main, sub: sub && prettySubj(sub) !== main ? sub : '' }; }
+function notesHTML() {
+  if (!notes) return `<div class="empty" style="margin-top:12px">Les notes arrivent à la prochaine synchro Pronote.</div>`;
+  const ov = num(notes.overall), co = num(notes.classOverall);
+  const S = (notes.subjects || []).filter(x => num(x.avg) != null).map(x => ({ ...x, ...subjParts(x.name), a20: on20(x.avg, x.outOf), c20: on20(x.classAvg, x.outOf) })).sort((a, b) => a.a20 - b.a20);
+  const subj = S.map(x => `<div class="nRow"><span class="nB">${subjBadge(x.main)}</span><div class="nTx"><b>${esc(x.main)}</b>${x.sub ? `<small>${esc(x.sub)}</small>` : ''}
+      <div class="nBar"><i class="${gradeCls(x.a20)}" style="width:${Math.max(3, x.a20 * 5)}%"></i>${x.c20 != null ? `<u style="left:${x.c20 * 5}%" title="Moyenne de la classe"></u>` : ''}</div></div>
+      <div class="nV"><b class="${gradeCls(x.a20)}">${fmtN(x.avg)}</b><small>classe ${fmtN(x.classAvg)}</small></div></div>`).join('');
+  const G = (notes.grades || []).slice(0, 25).map(g => { const p = subjParts(g.subject), v20 = on20(g.value, g.outOf); return `<div class="gRow">${subjBadge(p.main, 'sq')}<div class="nTx"><b>${esc(g.comment || p.main)}</b><small>${esc(p.main)} · ${new Date(g.date + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}${g.coef && g.coef !== 1 ? ' · coef ' + fmtN(g.coef) : ''}</small></div>
+      <div class="nV"><b class="${gradeCls(v20)}">${fmtN(g.value)}<span>/${fmtN(g.outOf)}</span></b>${g.avg != null ? `<small>classe ${fmtN(g.avg)}</small>` : ''}</div></div>`; }).join('');
+  return `<div class="nHero card"><div><span class="nLbl">${esc(notes.period || 'Moyenne')}</span><b class="nBig ${gradeCls(ov)}">${fmtN(ov)}</b><span class="nCls">Classe : ${fmtN(co)}${ov != null && co != null ? ` · <i class="${ov >= co ? 'up' : 'dn'}">${ov >= co ? '+' : ''}${fmtN(Math.round((ov - co) * 100) / 100)}</i>` : ''}</span></div>
+      <button class="btn" id="nAsk">${ICON.ia} Où bosser ?</button></div>
+    <div class="dayHead"><b>Par matière</b><span>de la plus faible à la meilleure</span></div><div class="card nList">${subj || '<div class="empty">Pas encore de moyenne</div>'}</div>
+    <div class="dayHead"><b>Dernières notes</b></div><div class="card nList">${G || '<div class="empty">Aucune note</div>'}</div>`;
+}
+function notesCtx() {
+  if (!notes) return '';
+  const S = (notes.subjects || []).filter(x => num(x.avg) != null).map(x => `${subjParts(x.name).main}${subjParts(x.name).sub ? ' (' + subjParts(x.name).sub + ')' : ''} ${fmtN(x.avg)}/${x.outOf} (classe ${fmtN(x.classAvg)})`).join(' ; ');
+  const G = (notes.grades || []).slice(0, 8).map(g => `${subjParts(g.subject).main} ${fmtN(g.value)}/${fmtN(g.outOf)} le ${g.date}${g.comment ? ' « ' + g.comment + ' »' : ''}`).join(' ; ');
+  return `\n\nNOTES PRONOTE (${notes.period}) : moyenne générale ${fmtN(notes.overall)} (classe ${fmtN(notes.classOverall)}). Par matière : ${S}. Dernières notes : ${G}.`;
+}
+
+/* ---------- Mode focus (Pomodoro) ---------- */
+let focus = store.get('orbit.focus', null), focusTimer = null;
+const FOCUS_WORK = 25, FOCUS_BREAK = 5;
+function startFocus(t) {
+  focus = { id: t?.id || null, title: t?.title || 'Séance de travail', subject: t?.subject || null, phase: 'work', end: Date.now() + FOCUS_WORK * 60e3, paused: null, done: 0 };
+  store.set('orbit.focus', focus); closeSheet(); showFocus(); beep(660, .08);
+}
+function focusLeft() { return Math.max(0, (focus.paused ?? focus.end) - (focus.paused ? 0 : Date.now())) ; }
+function showFocus() {
+  let o = $('#focus'); if (!o) { o = document.createElement('div'); o.id = 'focus'; o.className = 'focusO'; document.body.appendChild(o); }
+  const C = 2 * Math.PI * 120;
+  o.innerHTML = `<div class="fBg"></div><div class="fBox">
+    <span class="fPh" id="fPh"></span>
+    <div class="fRing"><svg viewBox="0 0 280 280"><circle class="bg" cx="140" cy="140" r="120"/><circle class="fg" id="fArc" cx="140" cy="140" r="120" stroke-dasharray="${C}"/></svg><div class="fIn"><b id="fTime">25:00</b><small id="fEnd"></small></div></div>
+    <div class="fTitle">${focus.subject ? subjBadge(focus.subject, 'sq mini') : ''}<span>${esc(focus.title)}</span></div>
+    <div class="fDots" id="fDots"></div>
+    <div class="fBtns"><button class="btn" id="fPause"></button><button class="btn" id="fSkip">Passer</button>${focus.id ? '<button class="btn p" id="fDone">C\'est fini ✓</button>' : ''}<button class="btn" id="fStop">Arrêter</button></div></div>`;
+  requestAnimationFrame(() => o.classList.add('on'));
+  $('#fPause').onclick = () => { if (focus.paused) { focus.end = Date.now() + focus.paused; focus.paused = null; } else focus.paused = focus.end - Date.now(); store.set('orbit.focus', focus); tickFocus(); };
+  $('#fSkip').onclick = () => nextPhase(true);
+  $('#fStop').onclick = stopFocus;
+  const fd = $('#fDone'); if (fd) fd.onclick = () => { const t = allItems().find(x => x.id === focus.id); stopFocus(); if (t && !t.done) completeTask(t, true); };
+  clearInterval(focusTimer); focusTimer = setInterval(tickFocus, 500); tickFocus();
+}
+function tickFocus() {
+  if (!focus || !$('#focus')) return;
+  const left = focus.paused ?? (focus.end - Date.now());
+  if (left <= 0 && !focus.paused) return nextPhase(false);
+  const tot = (focus.phase === 'work' ? FOCUS_WORK : FOCUS_BREAK) * 60e3, C = 2 * Math.PI * 120;
+  $('#fTime').textContent = `${String(Math.floor(left / 60e3)).padStart(2, '0')}:${String(Math.floor(left / 1e3) % 60).padStart(2, '0')}`;
+  $('#fArc').style.strokeDashoffset = C * (1 - left / tot);
+  $('#fPh').textContent = focus.paused ? 'En pause' : focus.phase === 'work' ? 'Concentration' : 'Pause';
+  $('#fEnd').textContent = focus.paused ? '' : 'fin à ' + fmtTime(new Date(focus.end));
+  $('#fPause').textContent = focus.paused ? 'Reprendre' : 'Pause';
+  $('#focus').classList.toggle('brk', focus.phase === 'break');
+  $('#fDots').innerHTML = Array.from({ length: Math.max(4, focus.done + 1) }, (_, i) => `<i class="${i < focus.done ? 'on' : ''}"></i>`).join('');
+  document.title = `${$('#fTime').textContent} · ${focus.phase === 'work' ? 'Focus' : 'Pause'}`;
+}
+function nextPhase(skip) {
+  if (focus.phase === 'work') { focus.done++; focus.phase = 'break'; focus.end = Date.now() + FOCUS_BREAK * 60e3; if (!skip) { toast('Bien joué 💪', `${focus.done} séance${focus.done > 1 ? 's' : ''} · 5 min de pause`); chime(); } }
+  else { focus.phase = 'work'; focus.end = Date.now() + FOCUS_WORK * 60e3; if (!skip) { toast('C\'est reparti', '25 min de concentration'); chime(); } }
+  focus.paused = null; store.set('orbit.focus', focus); tickFocus();
+}
+function stopFocus() { clearInterval(focusTimer); focus = null; store.set('orbit.focus', null); const o = $('#focus'); if (o) { o.classList.remove('on'); setTimeout(() => o.remove(), 350); } document.title = 'Orbit'; }
+let actx = null;
+function beep(f = 880, d = .15, when = 0) { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = f; o.type = 'sine'; g.gain.setValueAtTime(.0001, actx.currentTime + when); g.gain.exponentialRampToValueAtTime(.3, actx.currentTime + when + .02); g.gain.exponentialRampToValueAtTime(.0001, actx.currentTime + when + d); o.connect(g).connect(actx.destination); o.start(actx.currentTime + when); o.stop(actx.currentTime + when + d + .05); } catch { } }
+function chime() { beep(660, .25, 0); beep(880, .25, .22); beep(1100, .4, .44); try { navigator.vibrate?.([200, 100, 200]); } catch { } }
+
+/* ---------- Dictée vocale ---------- */
+let rec = null;
+async function toggleVoice(btn, input) {
+  if (rec) { rec.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return toast('Micro indisponible', 'Utilise le micro du clavier de ton téléphone');
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { return toast('Micro refusé', 'Autorise le micro pour Orbit dans les réglages'); }
+  const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported?.(t)) || '';
+  const chunks = []; rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  const stopT = setTimeout(() => rec?.state === 'recording' && rec.stop(), 60e3);
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = async () => {
+    clearTimeout(stopT); stream.getTracks().forEach(t => t.stop()); rec = null; btn.classList.remove('rec'); btn.classList.add('busy');
+    try {
+      const blob = new Blob(chunks, { type: chunks[0]?.type || type || 'audio/webm' });
+      if (blob.size < 1500) { btn.classList.remove('busy'); return; }
+      const b64 = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.readAsDataURL(blob); });
+      const r = await extra('transcribe', { audio: b64, mime: blob.type });
+      if (r.ok && r.text) { input.value = (input.value ? input.value.trim() + ' ' : '') + r.text; input.dispatchEvent(new Event('input')); input.focus(); }
+      else toast('Pas compris', r.error === 'no_key' ? 'Ajoute la clé Groq dans Réglages' : 'Réessaie en parlant plus près');
+    } catch { toast('Oups', 'La dictée n\'a pas marché'); }
+    btn.classList.remove('busy');
+  };
+  rec.start(); btn.classList.add('rec'); try { navigator.vibrate?.(30); } catch { }
+}
+const MIC_SVG = SVG('<rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>');
+
 function rHomework() {
   const v = $('#v-devoirs');
   const H = allItems().filter(t => (t.kind === 'devoir' || t.kind === 'revision') && !t.done).sort(byDue);
@@ -635,7 +758,10 @@ function rHomework() {
     const [b, s] = k === 'late' ? ['En retard', ''] : k === 'none' ? ['Sans date', ''] : dayTitle(new Date(k + 'T12:00'));
     list += `<div class="dayHead ${k === 'late' ? 'late' : ''}"><b>${b}</b><span>${s}</span><span class="n">${g.length}</span></div><div class="list">${g.map(t => itemHTML(t, { noDue: k !== 'late' })).join('')}</div>`;
   }
-  v.innerHTML = `${subjects.length ? `<div class="chipsRow" style="margin-bottom:6px">${subjects.map(s => `<span>${subjBadge(s, 'sq mini')}${esc(s)} · ${H.filter(t => (t.subject || 'Autre') === s).length}</span>`).join('')}</div>` : ''}
+  const seg = `<div class="seg hwSeg" id="hwSeg"><div class="pill"></div><button data-h="devoirs" class="${hwTab === 'devoirs' ? 'on' : ''}">Devoirs</button><button data-h="notes" class="${hwTab === 'notes' ? 'on' : ''}">Notes${notes && num(notes.overall) != null ? ' · ' + fmtN(notes.overall) : ''}</button></div>`;
+  const bindSeg = () => { v.querySelectorAll('#hwSeg button').forEach(b => b.onclick = () => { hwTab = b.dataset.h; rHomework(); if (hwTab === 'notes') loadNotes(); }); segPill('#hwSeg'); };
+  if (hwTab === 'notes') { v.innerHTML = seg + notesHTML(); bindSeg(); const na = $('#nAsk'); if (na) na.onclick = () => { go('ia'); ask('Regarde mes notes et dis-moi dans quelles matières je dois bosser en priorité, avec un plan concret pour cette semaine.'); }; return; }
+  v.innerHTML = seg + `${subjects.length ? `<div class="chipsRow" style="margin-bottom:6px">${subjects.map(s => `<span>${subjBadge(s, 'sq mini')}${esc(s)} · ${H.filter(t => (t.subject || 'Autre') === s).length}</span>`).join('')}</div>` : ''}
     ${list || '<div class="empty" style="margin-top:12px">Aucun devoir à faire 🎉</div>'}
     <div class="grid" style="margin-top:26px">${pronoteCardHTML()}
       <details class="fold"><summary>＋ Import manuel (copier-coller ou capture)</summary>
@@ -645,7 +771,7 @@ function rHomework() {
         <div style="display:flex;gap:8px;margin-top:12px"><button class="btn p" id="pnGo" ${server.flags?.ai ? '' : 'disabled'}>Importer</button></div>
         <div id="pnOut" class="small muted" style="margin-top:10px">${server.flags?.ai ? '' : 'Nécessite une clé IA (Réglages). Les captures demandent Gemini.'}</div>
       </details></div>`;
-  bindList(v); bindPronoteCard();
+  bindList(v); bindPronoteCard(); bindSeg();
   let files = [];
   const dz = $('#pnDrop'), take = fs => { files = [...fs].filter(f => f.type.startsWith('image/')); dz.textContent = `📷 ${files.length} capture${files.length > 1 ? 's' : ''} prête${files.length > 1 ? 's' : ''}`; };
   $('#pnFile').onchange = e => take(e.target.files);
@@ -731,7 +857,7 @@ function paintChat(stick = true) {
     + (asking ? `<div class="msgRow">${AI_AV}<div class="msg a think"><i></i><i></i><i></i></div></div>` : '');
   $('#iaSugg').hidden = chat.length > 0 || asking;
   $('#iaNew').hidden = !chat.length;
-  const inp = $('#chatIn'), btn = $('#chatF button'); if (inp) { inp.disabled = asking; btn.disabled = asking; }
+  const inp = $('#chatIn'), btn = $('#chatF button:last-child'); if (inp) { inp.disabled = asking; btn.disabled = asking; }
   if (stick || atBottom) requestAnimationFrame(() => { const last = L.querySelector('.msgRow:last-child, .msg.u:last-child'); if (last && last.offsetHeight > L.clientHeight * .7 && !asking && chat.at(-1)?.role === 'assistant') L.scrollTop = last.offsetTop - 10; else L.scrollTop = L.scrollHeight; });
 }
 function rAI(force) {
@@ -743,7 +869,7 @@ function rAI(force) {
     <div class="chatList" id="chatList"></div>
     <div class="iaBottom">
       <div class="sugg" id="iaSugg">${IA_SUGG.map(([l, q]) => `<button data-q="${esc(q)}">${l}</button>`).join('')}</div>
-      <form class="chatin" id="chatF"><textarea id="chatIn" rows="1" placeholder="Ajoute un truc ou pose une question…" aria-label="Message" enterkeyhint="send"></textarea><button aria-label="Envoyer">${SVG('<path d="M5 12h14M13 6l6 6-6 6"/>')}</button></form>
+      <form class="chatin" id="chatF"><textarea id="chatIn" rows="1" placeholder="Écris ou dicte…" aria-label="Message" enterkeyhint="send"></textarea><button type="button" class="mic" id="chatMic" aria-label="Dicter">${MIC_SVG}</button><button aria-label="Envoyer">${SVG('<path d="M5 12h14M13 6l6 6-6 6"/>')}</button></form>
     </div>`;
   const inp = $('#chatIn');
   const grow = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px'; };
@@ -752,6 +878,7 @@ function rAI(force) {
   $('#chatF').onsubmit = e => { e.preventDefault(); const q = inp.value.trim(); if (q) { inp.value = ''; grow(); ask(q); } };
   v.querySelectorAll('#iaSugg button').forEach(b => b.onclick = () => ask(b.dataset.q));
   $('#iaNew').onclick = () => { chat = []; saveChat(); paintChat(); };
+  $('#chatMic').onclick = e => toggleVoice(e.currentTarget, inp);
   $('#chatList').onclick = e => {
     const c = e.target.closest('[data-copy]'), r = e.target.closest('[data-redo]');
     if (c) { navigator.clipboard?.writeText(chat[+c.dataset.copy].content).then(() => toast('Copié', ''), () => {}); }
@@ -771,7 +898,7 @@ function snapshotCtx() {
   }).join('\n');
   const nowS = daySchedule(new Date()), cur = nowS.find(x => x.start <= new Date() && new Date() < x.end), nx = nowS.find(x => x.start > new Date());
   const pos = cur ? `En ce moment : ${cur.title} jusqu'à ${fmtTime(cur.end)}.` : nx ? `Prochain : ${nx.title} à ${fmtTime(nx.start)}.` : 'Plus de cours aujourd\'hui.';
-  return `${todayCtx()} ${pos}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
+  return `${todayCtx()} ${pos}${notesCtx()}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
 }
 let asking = false;
 async function ask(q) {
@@ -822,8 +949,9 @@ function openEditor(t, isNew = false) {
       <p class="small muted" style="margin-top:4px">${t.source === 'revision' ? 'Révision · ' + (t.due ? fmtDay(dueDate(t)) + ' à 18h' : '') : 'Pronote · pour ' + (t.due ? fmtDay(dueDate(t)) : '—')}</p>
       <div style="margin-top:14px;line-height:1.55;white-space:pre-wrap">${esc(t.note || t.title)}</div>
       <label class="l">Rappels Discord</label><div class="chips">${t.reminders.map(r => `<span class="chip ${r.fired ? '' : 'acc'}">${r.label} · ${new Date(r.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(r.at)}</span>`).join('')}</div>
-      <div class="acts"><button class="btn p" id="eDone">${t.done ? 'Remettre à faire' : 'Marquer fait'}</button>${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}<button class="btn" id="eX">Fermer</button></div>`;
+      <div class="acts"><button class="btn p" id="eDone">${t.done ? 'Remettre à faire' : 'Marquer fait'}</button>${t.done ? '' : '<button class="btn" id="eFocus">▶ Focus 25 min</button>'}${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}<button class="btn" id="eX">Fermer</button></div>`;
     $('#eDone').onclick = () => { closeSheet(); completeTask(t, !t.done); };
+    const ef = $('#eFocus'); if (ef) ef.onclick = () => startFocus(t);
     $('#eX').onclick = closeSheet; openSheet(); return;
   }
   s.innerHTML = `<div class="grab"></div><h2>${isNew ? 'Nouvelle tâche' : 'Détails'}</h2>
@@ -833,7 +961,7 @@ function openEditor(t, isNew = false) {
     <label class="l" for="eS">Matière</label><input class="inp" id="eS" value="${esc(t.subject || '')}" placeholder="—">
     <label class="l" for="eN">Note</label><textarea class="inp" id="eN" rows="2">${esc(t.note || '')}</textarea>
     <label class="l">Rappels Discord</label><div class="chips">${(t.reminders || []).map(r => `<span class="chip ${r.fired ? '' : 'acc'}">${r.label} · ${new Date(r.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(r.at)}</span>`).join('') || `<span class="chip">${t.due ? (dueDate(t) < new Date() ? 'Date passée : plus de rappel' : 'Plus de rappel prévu') : 'Aucun (ajoute une date)'}</span>`}</div>
-    <div class="acts"><button class="btn p" id="eSave">Enregistrer</button>${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}${isNew ? '' : '<button class="btn" id="eDel" style="color:#ff6b6b">Supprimer</button>'}<button class="btn" id="eX">Fermer</button></div>`;
+    <div class="acts"><button class="btn p" id="eSave">Enregistrer</button>${isNew || t.done ? '' : '<button class="btn" id="eFocus">▶ Focus</button>'}${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}${isNew ? '' : '<button class="btn" id="eDel" style="color:#ff6b6b">Supprimer</button>'}<button class="btn" id="eX">Fermer</button></div>`;
   $('#eK').value = t.kind || 'tache'; $('#eR').value = t.repeat || '';
   $('#eSave').onclick = () => {
     const nt = { ...t, title: $('#eT').value.trim() || t.title, due: $('#eD').value || null, time: $('#eH').value || null, kind: $('#eK').value, repeat: $('#eR').value || null, subject: $('#eS').value.trim() || null, note: $('#eN').value.trim() || null };
@@ -841,6 +969,7 @@ function openEditor(t, isNew = false) {
     if (nt.due !== t.due || nt.time !== t.time || nt.repeat !== t.repeat || !t.reminders) nt.reminders = buildReminders(nt);
     closeSheet(); saveTask(nt); if (isNew) toast('Ajouté', `${nt.reminders.length} rappels programmés`);
   };
+  const ef = $('#eFocus'); if (ef) ef.onclick = () => startFocus(t);
   const d = $('#eDel'); if (d) d.onclick = () => { closeSheet(); removeTask(t.id); toast('Supprimé', t.title); };
   $('#eX').onclick = closeSheet; openSheet();
 }
@@ -855,6 +984,7 @@ function openSettings() {
   const s = $('#sheet'), f = server.flags || {};
   const share = location.origin + location.pathname + '#k=' + encodeURIComponent(key || '');
   s.innerHTML = `<div class="grab"></div><h2>Réglages</h2>
+  <label class="l">Style</label><div class="swatches styles">${[['profond', 'Profond'], ['glass', 'Liquid Glass']].map(([k, l]) => `<button class="styleOpt ${(settings.style || 'profond') === k ? 'on' : ''}" data-s="${k}"><span style="position:relative;z-index:1">${l}</span></button>`).join('')}</div>
   <label class="l">Couleur</label><div class="swatches">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="sw ${settings.accent === k ? 'on' : ''}" data-a="${k}" style="background:${c}" aria-label="${k}"></button>`).join('')}</div>
   <label class="l">Intensité des rappels</label><div class="seg" id="iseg"><div class="pill"></div>${[['leger', 'Léger'], ['normal', 'Normal'], ['insistant', 'Insistant']].map(([k, l]) => `<button data-i="${k}" class="${settings.intensite === k ? 'on' : ''}">${l}</button>`).join('')}</div>
   <p class="help">${{ leger: 'J-7, la veille et le jour J.', normal: 'J-14, J-7, J-3, J-2, la veille et le jour J.', insistant: 'Presque tous les jours dans les 10 derniers jours.' }[settings.intensite]} Les tâches qui se répètent ont juste un rappel le jour même.</p>
@@ -883,6 +1013,7 @@ function openSettings() {
   <div class="opt"><div><b>Se déconnecter de cet appareil</b><p>Efface le code et les données gardées ici (rien n'est supprimé sur le serveur).</p></div><button class="btn sm" id="sOut" style="color:#ff6b6b">Déconnecter</button></div>
   <div class="acts"><button class="btn" id="eX">Fermer</button></div>`;
   s.querySelectorAll('.sw').forEach(b => b.onclick = () => { settings.accent = b.dataset.a; saveSettings(); s.querySelectorAll('.sw').forEach(x => x.classList.toggle('on', x === b)); });
+  s.querySelectorAll('.styleOpt').forEach(b => b.onclick = () => { settings.style = b.dataset.s; saveSettings(); s.querySelectorAll('.styleOpt').forEach(x => x.classList.toggle('on', x === b)); });
   segPill('#iseg');
   s.querySelectorAll('#iseg button').forEach(b => b.onclick = () => {
     settings.intensite = b.dataset.i; saveSettings();
@@ -903,7 +1034,7 @@ function openSettings() {
   $('#sOut').onclick = () => { if (!confirm('Déconnecter Orbit de cet appareil ?')) return; localStorage.clear(); location.hash = ''; location.reload(); };
   $('#eX').onclick = closeSheet; openSheet();
 }
-function applyAccent() { const [a, b, c] = ACCENTS[settings.accent] || ACCENTS.corail; const r = document.documentElement.style; r.setProperty('--acc', a); r.setProperty('--acc2', b); r.setProperty('--accSoft', c); }
+function applyAccent() { const [a, b, c] = ACCENTS[settings.accent] || ACCENTS.corail; const r = document.documentElement.style; r.setProperty('--acc', a); r.setProperty('--acc2', b); r.setProperty('--accSoft', c); document.body.classList.toggle('glass', settings.style === 'glass'); document.documentElement.classList.toggle('glass', settings.style === 'glass'); document.querySelector('meta[name=theme-color]')?.setAttribute('content', settings.style === 'glass' ? '#030203' : '#050404'); }
 
 /* ---------- Pronote automatique ---------- */
 let pnBusy = false, pnMsg = '', qrData = null;
@@ -1011,6 +1142,8 @@ function boot() {
   if (!key) { showGate(); return; }
   pull(!lastSince);
   setInterval(() => pull(), 60e3);
+  loadNotes(); setInterval(loadNotes, 10 * 60e3);
+  if (focus) showFocus();
   setInterval(checkReminders, 30e3); setTimeout(checkReminders, 4000);
   setInterval(() => { if (current === 'aujourdhui' && document.visibilityState === 'visible') updateNow(); }, 20e3);
   setInterval(() => { if (current === 'aujourdhui' && document.visibilityState === 'visible' && !document.querySelector('#sheet.on')) rToday(); }, 5 * 60e3);

@@ -125,8 +125,46 @@ Deno.serve(async (req) => {
       trace.push("emploi du temps : " + String((e as Error)?.message ?? e).slice(0, 120));
     }
 
+    // Notes (période en cours). Une panne ici ne bloque rien.
+    let notes = 0;
+    try {
+      const tab = session.userResource.tabs.get(pronote.TabLocation.Grades);
+      const periods = tab?.periods ?? [];
+      const period = periods.find((p: any) => new Date(p.startDate) <= now && now <= new Date(p.endDate) && /trim|sem/i.test(p.name)) ?? tab?.defaultPeriod ?? periods[0];
+      if (period) {
+        const ov: any = await pronote.gradesOverview(session, period);
+        const val = (v: any) => !v ? null : v.kind === 0 ? Math.round(v.points * 100) / 100 : ({ 1: "Abs", 2: "Disp", 3: "NN", 4: "Inapte", 5: "Non rendu", 6: "Abs (0)", 7: "Non rendu (0)", 8: "Félicitations" } as any)[v.kind] ?? null;
+        // Identifiant stable (Pronote change ses id à chaque session) : sinon chaque synchro « découvrirait » de nouvelles notes
+        const gids = await Promise.all((ov.grades ?? []).map(async (g: any) => "n" + (await sha(`${g.subject?.name}|${new Date(g.date).toISOString().slice(0, 10)}|${g.value?.kind}:${g.value?.points}|${g.outOf?.points}|${g.comment ?? ""}|${g.coefficient}`)).slice(0, 24)));
+        const grades = (ov.grades ?? []).map((g: any, i: number) => ({
+          id: gids[i], subject: g.subject?.name ?? null, value: val(g.value), outOf: val(g.outOf) ?? 20, coef: g.coefficient ?? 1,
+          date: parisDay(new Date(g.date)), comment: clean(g.comment ?? "").slice(0, 200), avg: val(g.average), max: val(g.max), min: val(g.min),
+        })).sort((a: any, b: any) => b.date.localeCompare(a.date));
+        const value = {
+          v: 2, period: period.name, overall: val(ov.overallAverage), classOverall: val(ov.classAverage),
+          subjects: (ov.subjectsAverages ?? []).map((a: any) => ({ name: a.subject?.name ?? "?", avg: val(a.student), classAvg: val(a.class_average), max: val(a.max), min: val(a.min), outOf: val(a.outOf) ?? 20 })),
+          grades: grades.slice(0, 80),
+        };
+        const { data: prev } = await db.from("orbit_kv").select("value").eq("key", "notes").maybeSingle();
+        // Nouvelle note → message Discord (pas au tout premier chargement)
+        if (prev?.value?.v === 2 && prev.value.grades) {
+          const known = new Set(prev.value.grades.map((g: any) => g.id));
+          const fresh = grades.filter((g: any) => !known.has(g.id)).slice(0, 5);
+          if (fresh.length) await db.from("orbit_rappels").upsert(fresh.map((g: any) => ({
+            id: "n:" + g.id, source: "notes", at: now.toISOString(),
+            title: `📝 Nouvelle note · ${g.subject ?? "?"} : ${g.value}${typeof g.value === "number" ? "/" + g.outOf : ""}`,
+            body: [g.comment, g.avg != null ? `Moyenne de la classe : ${g.avg}/${g.outOf}` : "", g.coef && g.coef !== 1 ? `Coef ${g.coef}` : ""].filter(Boolean).join("\n") || null,
+          })), { onConflict: "id", ignoreDuplicates: true });
+        }
+        await db.from("orbit_kv").upsert({ key: "notes", value, updated_at: now.toISOString() });
+        notes = grades.length;
+      }
+    } catch (e) {
+      trace.push("notes : " + String((e as Error)?.message ?? e).slice(0, 120));
+    }
+
     await db.from("orbit_pronote").update({ last_sync: now.toISOString(), last_error: null, fail_count: 0 }).eq("id", 1);
-    return json({ ok: true, mode, devoirs: rows.length, cours });
+    return json({ ok: true, mode, devoirs: rows.length, cours, notes, ...(trace.length ? { warn: trace.slice(-2) } : {}) });
   } catch (e) {
     let msg = (e as Error)?.name ? `${(e as Error).name}: ${(e as Error).message}` : String(e);
     if (trace.length) msg += " | trace " + trace.slice(-6).join(" || ");

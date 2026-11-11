@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#100e0d">
+<meta name="theme-color" content="#050404">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,6 +19,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="bgFx" aria-hidden="true"><i></i><i></i><i></i></div>
 <div class="app">
   <aside class="side"><div class="rail">
     <div class="brand" title="Orbit"></div>
@@ -37,6 +38,7 @@
     <div class="capture">
       <form id="capForm" autocomplete="off">
         <input id="capIn" placeholder="Ajoute un truc ou pose une question…" enterkeyhint="send" aria-label="Ajouter ou demander">
+        <button class="mic" id="capMic" type="button" aria-label="Dicter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
         <button class="go" id="capGo" type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Ajouter</span></button>
       </form>
       <div class="preview" id="preview"></div>

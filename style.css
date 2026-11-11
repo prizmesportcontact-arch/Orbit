@@ -1,5 +1,5 @@
 :root{
-  --bg:#100e0d; --panel:#141110; --card:#1d1917; --card2:#26211e; --line:#2a2522;
+  --bg:#050404; --panel:#0c0a0a; --card:#131111; --card2:#1c1918; --line:#24201e;
   --txt:#f7f2ec; --mut:#b3aaa2; --dim:#857c75;
   --acc:#ff6a47; --acc2:#ff8c70; --accTxt:#100e0d; --accSoft:#3a221b;
   --ok:#4fd1a5; --warn:#e8c48a; --bad:#ffb23f; --blue:#6f9bff;
@@ -36,11 +36,14 @@ button{cursor:pointer;border:0;background:none}
 .dot.on{background:var(--ok)}
 /* ---------- Main ---------- */
 .main{position:relative;overflow:hidden;display:flex;flex-direction:column}
-.top{padding:calc(26px + var(--safeT)) 32px 10px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.top{padding:calc(26px + var(--safeT)) 32px 10px;display:flex;align-items:flex-end;gap:16px;flex-wrap:nowrap}
+.top>div:first-child{min-width:0;flex:1}
+.top h1{white-space:nowrap}
 .top h1{font-family:var(--disp);font-size:44px;font-weight:800;letter-spacing:-2px;line-height:.9;transition:font-size .35s var(--ease)}
 .top.big h1{font-size:88px;letter-spacing:-4.5px}
 .top .sub{color:var(--mut);font-size:17px;font-weight:500;margin-top:10px}
-.top .sp{flex:1}
+.top .sp{display:none}
+.top .acts{flex:none}
 .top .acts{display:flex;gap:8px;align-items:center}
 .iconbtn{width:42px;height:42px;border-radius:14px;background:var(--card);display:grid;place-items:center;color:var(--mut);transition:transform .2s,background .2s}
 .iconbtn:hover{background:var(--card2);color:var(--txt)}
@@ -422,3 +425,105 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
 .subj .sq b.sqTxt{font-size:14.5px}.subj .sq b.sqTxt.long{font-size:10.5px}
 .sq.mini b.sqTxt{font-size:8.5px}.sq.mini b.sqTxt.long{font-size:6px}
 .sq svg{width:20px;height:20px}.subj .sq svg{width:22px;height:22px}.sq.mini svg{width:13px;height:13px}
+
+/* ================= Profondeur : badges matières vifs et lumineux ================= */
+.sq{background-image:linear-gradient(150deg,rgba(255,255,255,.28),rgba(255,255,255,0) 45%,rgba(0,0,0,.18));box-shadow:0 6px 18px -6px var(--sc,transparent),inset 0 1px 0 rgba(255,255,255,.35)}
+.sq.off{box-shadow:none;background-image:none}
+.item{border:1px solid rgba(255,255,255,.035)}
+.card{border-color:rgba(255,255,255,.04)}
+.card .item{background:var(--card2)}
+
+/* ================= Devoirs / Notes ================= */
+.hwSeg{margin-bottom:14px}
+.nHero{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:20px 22px;background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--acc) 22%,transparent),transparent 60%),var(--card)}
+.nHero>div{display:flex;flex-direction:column;gap:4px}
+.nLbl{font-size:12px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--mut)}
+.nBig{font-family:var(--disp);font-size:64px;font-weight:800;letter-spacing:-3px;line-height:.95}
+.nCls{font-size:13.5px;color:var(--mut)} .nCls i{font-style:normal;font-weight:800} .nCls i.up{color:#3ee08f} .nCls i.dn{color:#ff5a6a}
+.nHero .btn{display:flex;align-items:center;gap:7px;flex:none} .nHero .btn svg{width:16px;height:16px}
+.nList{display:flex;flex-direction:column;gap:4px;padding:8px}
+.nRow,.gRow{display:flex;align-items:center;gap:12px;padding:10px;border-radius:16px}
+.nRow+.nRow,.gRow+.gRow{border-top:1px solid rgba(255,255,255,.04)}
+.nTx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nTx b{font-weight:700;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nTx small{font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nBar{position:relative;height:7px;border-radius:9px;background:rgba(255,255,255,.06);margin-top:6px;overflow:visible}
+.nBar i{position:absolute;left:0;top:0;bottom:0;border-radius:9px;background:currentColor}
+.nBar u{position:absolute;top:-3px;width:2px;height:13px;background:var(--txt);opacity:.55;border-radius:2px;text-decoration:none}
+.nV{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none}
+.nV b{font-family:var(--disp);font-size:22px;font-weight:800;letter-spacing:-.6px}
+.nV b span{font-size:12px;color:var(--dim);font-weight:700;letter-spacing:0}
+.nV small{font-size:11.5px;color:var(--dim)}
+.g4{color:#3ee08f}.g3{color:#9be15d}.g2{color:#ffc93c}.g1{color:#ff8a3d}.g0{color:#ff4d5e}
+.nBar i.g4{background:#3ee08f}.nBar i.g3{background:#9be15d}.nBar i.g2{background:#ffc93c}.nBar i.g1{background:#ff8a3d}.nBar i.g0{background:#ff4d5e}
+
+/* ================= Micro (dictée) ================= */
+.mic{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;flex:none;color:#6f6862;transition:all .2s}
+.mic svg{width:20px;height:20px}
+.capture .mic{color:#6f6862}
+.view.iaV .chatin button.mic{background:transparent;color:var(--mut);width:40px;height:42px}
+.mic.rec,.view.iaV .chatin button.mic.rec{background:#ff3b4e!important;color:#fff!important;animation:micP 1.2s infinite}
+.mic.busy{opacity:.5;animation:spinO 1s linear infinite}
+@keyframes micP{0%{box-shadow:0 0 0 0 #ff3b4e88}70%{box-shadow:0 0 0 12px #ff3b4e00}100%{box-shadow:0 0 0 0 #ff3b4e00}}
+@keyframes spinO{50%{opacity:.25}}
+
+/* ================= Mode focus ================= */
+.focusO{position:fixed;inset:0;z-index:90;display:grid;place-items:center;opacity:0;transition:opacity .35s var(--ease);padding:24px}
+.focusO.on{opacity:1}
+.fBg{position:absolute;inset:0;background:radial-gradient(80% 60% at 50% 30%,color-mix(in srgb,var(--acc) 30%,transparent),transparent 70%),#030202;transition:background .6s}
+.focusO.brk .fBg{background:radial-gradient(80% 60% at 50% 30%,#3ee08f40,transparent 70%),#030202}
+.fBox{position:relative;display:flex;flex-direction:column;align-items:center;gap:18px;width:min(420px,100%);transform:translateY(16px) scale(.97);transition:transform .45s var(--ease)}
+.focusO.on .fBox{transform:none}
+.fPh{font-size:13px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--acc)}
+.focusO.brk .fPh{color:#3ee08f}
+.fRing{position:relative;width:min(280px,72vw);aspect-ratio:1}
+.fRing svg{width:100%;height:100%;transform:rotate(-90deg)}
+.fRing circle{fill:none;stroke-width:14;stroke-linecap:round}
+.fRing .bg{stroke:rgba(255,255,255,.07)}
+.fRing .fg{stroke:var(--acc);transition:stroke-dashoffset .5s linear;filter:drop-shadow(0 0 14px color-mix(in srgb,var(--acc) 60%,transparent))}
+.focusO.brk .fRing .fg{stroke:#3ee08f;filter:drop-shadow(0 0 14px #3ee08f99)}
+.fIn{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.fIn b{font-family:var(--disp);font-size:clamp(52px,16vw,72px);font-weight:800;letter-spacing:-3px;font-variant-numeric:tabular-nums}
+.fIn small{color:var(--mut);font-size:13px}
+.fTitle{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;text-align:center;max-width:100%}
+.fTitle span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fDots{display:flex;gap:8px}.fDots i{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.12)}.fDots i.on{background:var(--acc);box-shadow:0 0 10px var(--acc)}
+.fBtns{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px}
+
+/* ================= Style Liquid Glass (réglage) ================= */
+.bgFx{display:none}
+body.glass .bgFx{display:block;position:fixed;inset:-20%;z-index:-1;pointer-events:none;filter:blur(60px) saturate(140%);opacity:.9}
+body.glass .bgFx i{position:absolute;border-radius:50%;animation:blob 26s ease-in-out infinite alternate}
+body.glass .bgFx i:nth-child(1){width:55vmax;height:55vmax;left:-5%;top:-10%;background:radial-gradient(circle,color-mix(in srgb,var(--acc) 75%,transparent),transparent 65%)}
+body.glass .bgFx i:nth-child(2){width:50vmax;height:50vmax;right:-10%;top:20%;background:radial-gradient(circle,#3d6bffbb,transparent 65%);animation-duration:32s}
+body.glass .bgFx i:nth-child(3){width:45vmax;height:45vmax;left:20%;bottom:-15%;background:radial-gradient(circle,#b14dffaa,transparent 65%);animation-duration:38s}
+@keyframes blob{0%{transform:translate(0,0) scale(1)}50%{transform:translate(8vmax,6vmax) scale(1.15)}100%{transform:translate(-6vmax,10vmax) scale(.95)}}
+html.glass{background:#030203}
+html.glass body{background:transparent}
+body.glass .app,body.glass .main{background:transparent}
+body.glass{--card:rgba(255,255,255,.07);--card2:rgba(255,255,255,.08);--panel:rgba(18,16,20,.55);--line:rgba(255,255,255,.12)}
+body.glass .card,body.glass .hero,body.glass .nowCard,body.glass .view>.list>.item,body.glass .list>.item,body.glass .tl .item,body.glass .msg.a,body.glass .seg,body.glass .chipsRow>span,body.glass .dayBar,body.glass details.fold,body.glass .week .day{
+  background:linear-gradient(160deg,rgba(255,255,255,.12),rgba(255,255,255,.04));
+  -webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.04),0 10px 30px -12px rgba(0,0,0,.6)}
+body.glass .card .item,body.glass .card .list>.item{background:rgba(255,255,255,.06);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.08)}
+body.glass .rail,body.glass .tabbar,body.glass .sheet,body.glass .view.iaV .chatin{
+  background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.05))!important;
+  -webkit-backdrop-filter:blur(28px) saturate(190%);backdrop-filter:blur(28px) saturate(190%);
+  border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 12px 40px -10px rgba(0,0,0,.7)}
+body.glass .tabbar{border-radius:30px;left:12px;right:12px;bottom:calc(10px + var(--safeB));height:72px;padding:8px 10px;border-top:1px solid rgba(255,255,255,.16)}
+body.glass .sheet{background:linear-gradient(160deg,rgba(40,36,44,.75),rgba(20,18,22,.8))!important}
+body.glass .capture form{background:rgba(255,255,255,.88);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 #fff,0 10px 30px -10px rgba(0,0,0,.6)}
+body.glass .item.cours.canceled{background:linear-gradient(160deg,rgba(255,80,90,.16),rgba(255,80,90,.05))}
+body.glass .nav .pill,body.glass .seg .pill{background:rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+body.glass .btn:not(.p){background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14)}
+body.glass .msg.u{box-shadow:0 8px 24px -8px color-mix(in srgb,var(--acc) 70%,transparent)}
+body.glass .fBg{background:radial-gradient(80% 60% at 50% 30%,color-mix(in srgb,var(--acc) 35%,transparent),transparent 70%),rgba(3,2,3,.85);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px)}
+@media (max-width:899px){ body.glass .view{padding-bottom:calc(120px + var(--safeB))} }
+.swatches.styles{gap:10px}
+.styleOpt{flex:1;height:64px;border-radius:16px;border:2px solid transparent;font-weight:800;font-size:13px;color:var(--txt);display:flex;align-items:flex-end;padding:9px 11px;position:relative;overflow:hidden}
+.styleOpt.on{border-color:var(--acc)}
+.styleOpt[data-s="profond"]{background:linear-gradient(150deg,#1a1716,#050404)}
+.styleOpt[data-s="glass"]{background:radial-gradient(circle at 20% 20%,color-mix(in srgb,var(--acc) 80%,transparent),transparent 55%),radial-gradient(circle at 85% 70%,#3d6bffcc,transparent 55%),#0a0812}
+.styleOpt[data-s="glass"]:after{content:"";position:absolute;inset:14px 14px 30px;border-radius:10px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(6px)}
