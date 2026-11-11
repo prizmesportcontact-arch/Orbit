@@ -1,6 +1,6 @@
 :root{
   --bg:#050404; --panel:#0c0a0a; --card:#131111; --card2:#1c1918; --line:#24201e;
-  --txt:#f7f2ec; --mut:#b3aaa2; --dim:#857c75;
+  --txt:#f7f2ec; --mut:#bdb4ac; --dim:#9a918a;
   --acc:#ff6a47; --acc2:#ff8c70; --accTxt:#100e0d; --accSoft:#3a221b;
   --ok:#4fd1a5; --warn:#e8c48a; --bad:#ffb23f; --blue:#6f9bff;
   --r:24px; --r2:18px; --r3:12px;
@@ -544,3 +544,35 @@ body.glass .nav button.on,body.glass .tabbar button.on{color:#fff;filter:drop-sh
 .exTop{display:flex;align-items:center;gap:12px}
 .examCard .list{display:flex;flex-direction:column;gap:8px}
 .examCard .item{padding:10px 12px}
+
+/* ================= Finitions (checklist design) ================= */
+/* 16. titres bien coupés */
+h1,h2,h3,.h2,.ttl,.hero .ttl,.dayHead b,.chatHello h3,.fTitle span,.item .tt,.nTx b{text-wrap:balance}
+/* 18. chiffres alignés */
+.tl .when,.mm,.tag,.nV,.nBig,.ring,.nowCard,.dayBarTxt,.fIn b,.badge,.hero .meta,.nCls,.dayHead .n,.subj small{font-variant-numeric:tabular-nums}
+/* 12. icônes cohérentes dans tags et boutons */
+.ti{width:12px;height:12px;flex:none}
+.tag,.mm .rem{display:inline-flex;align-items:center;gap:4px}
+.btn.ic{display:inline-flex;align-items:center;gap:7px}.btn.ic svg{width:15px;height:15px}
+.h2s{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;font-weight:600;color:var(--mut);letter-spacing:0;margin-left:8px}
+/* 14. rayon intérieur = rayon extérieur − marge */
+.card{--pad:18px}
+.card .item,.card .subj{border-radius:calc(var(--r) - 12px)}
+.examCard{padding:10px}.examCard .exTop{padding:4px 4px 0}.examCard .item{border-radius:calc(var(--r) - 10px)}
+.nList{padding:8px}.nList .nRow,.nList .gRow{border-radius:calc(var(--r) - 8px)}
+.seg .pill,.seg button{border-radius:10px}
+.capture .go{border-radius:calc(22px - 5px)}
+/* 19. états de chargement */
+.skel{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+.skel i{display:block;border-radius:var(--r2);background:linear-gradient(100deg,var(--card) 30%,var(--card2) 50%,var(--card) 70%);background-size:300% 100%;animation:shim 1.3s ease-in-out infinite}
+@keyframes shim{0%{background-position:100% 0}100%{background-position:0 0}}
+.btn:disabled{opacity:.6;cursor:default}
+/* 20. retour visuel utile : coche qui « pop », tâche qui s'efface, toast avec annuler */
+.item.done .check{animation:chk .45s var(--ease)}
+@keyframes chk{0%{transform:scale(.6)}55%{transform:scale(1.25)}100%{transform:none}}
+.item.done{opacity:.55}
+.toast{align-items:center}
+.toast .tx{flex:1;min-width:0;display:flex;flex-direction:column}
+.toast.ok .ic{background:var(--ok)}
+.toast .undo{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:11px;background:var(--card2);font-weight:700;font-size:13px;color:var(--txt);flex:none}
+.toast .undo svg{width:14px;height:14px}

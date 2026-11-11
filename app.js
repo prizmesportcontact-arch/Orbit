@@ -16,6 +16,8 @@ const store = {
 
 const SVG = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 const ICON = {
+  play: SVG('<path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/>'),
+  undo: SVG('<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   aujourdhui: SVG('<path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
   taches: SVG('<path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>'),
   devoirs: SVG('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>'),
@@ -36,7 +38,10 @@ const REPEATS = { '': 'Jamais', daily: 'Tous les jours', weekdays: 'En semaine (
 let key = store.get('orbit.key', null);
 let tasks = store.get('orbit.tasks', []);
 let settings = Object.assign({ accent: 'corail', style: 'profond', intensite: 'normal', pronoteDone: [], revDone: [] }, store.get('orbit.settings', {}));
+let synced = !!store.get('orbit.server', null);
 let server = store.get('orbit.server', { devoirs: [], cours: [], gcal: [], pronote: {}, flags: {} });
+const skel = (n = 3, h = 64) => `<div class="skel">${Array.from({ length: n }, (_, i) => `<i style="height:${i ? h : h * 2}px;animation-delay:${i * .12}s"></i>`).join('')}</div>`;
+let notesLoading = false;
 let lastSince = store.get('orbit.since', null);
 let outbox = store.get('orbit.outbox', { put: {}, del: [], settings: false });
 let current = 'aujourdhui', taskFilter = 'actives', agendaDay = startOfDay(new Date()), chat = [];
@@ -211,7 +216,7 @@ async function pull(full = false, forceCal = false) {
     }
     if (r.settings && !outbox.settings) { settings = Object.assign(settings, r.settings); applyAccent(); }
     server = { devoirs: r.devoirs, cours: r.cours, gcal: r.gcal, gcalAt: r.gcalAt, gcalError: r.gcalError, pronote: r.pronote, flags: r.flags };
-    lastSince = r.now; store.set('orbit.since', lastSince);
+    lastSince = r.now; store.set('orbit.since', lastSince); synced = true;
     persist(); render(); scheduleRappels();
   } catch (e) {
     if (e.code === 401) showGate("Ce code ne marche plus. Entre le nouveau code d'accès.");
@@ -260,11 +265,11 @@ function completeTask(t, done = true) {
     next.reminders = buildReminders(next);
     saveTask({ ...t, done: true, doneAt: new Date().toISOString(), repeat: null, repeatedTo: next.id });
     saveTask(next);
-    toast('Bien joué', `Prochaine fois : ${fmtDay(dueDate(next))}`);
+    toast('Fait', `Prochaine fois : ${fmtDay(dueDate(next))}`, { ok: true });
     return;
   }
   saveTask({ ...t, done, doneAt: done ? new Date().toISOString() : null });
-  if (done) toast('Bien joué', t.title);
+  if (done) toast('Fait', t.title, { ok: true, undo: () => saveTask({ ...t, done: false, doneAt: null }) });
 }
 
 /* Rappels Discord : envoyés au serveur, qui t'envoie un MP même app fermée */
@@ -388,7 +393,7 @@ const withTimeout = (p, ms) => Promise.race([p, new Promise((_, ko) => setTimeou
 function showPreview(isAI) {
   const L = pendingList, pv = $('#preview'), nRem = L.reduce((n, t) => n + t.reminders.length, 0);
   pv.innerHTML = L.map(t => `<div class="pvItem"><div class="t">${esc(t.title)}</div>
-    <div class="m">${t.due ? fmtDay(dueDate(t)) + (t.time ? ' à ' + t.time : '') : 'Pas de date'}${t.repeat ? ' · ↻ ' + REPEATS[t.repeat] : ''}${t.subject ? ' · ' + esc(t.subject) : ''}</div>
+    <div class="m">${t.due ? fmtDay(dueDate(t)) + (t.time ? ' à ' + t.time : '') : 'Pas de date'}${t.repeat ? ' · ' + REPEATS[t.repeat] : ''}${t.subject ? ' · ' + esc(t.subject) : ''}</div>
     <div class="m small">${t.reminders.length ? '🔔 ' + t.reminders.map(r => r.label).join(' · ') : 'Aucun rappel'}</div></div>`).join('')
     + `${isAI ? '' : '<div class="m small" style="margin-top:6px">Analyse simple (IA indisponible) : vérifie la date.</div>'}
     <div class="row"><button class="btn p" id="pvOk">${L.length > 1 ? `Ajouter les ${L.length}` : 'Ajouter'}${nRem ? ` · ${nRem} rappel${nRem > 1 ? 's' : ''}` : ''}</button>${L.length === 1 ? '<button class="btn" id="pvEdit">Modifier</button>' : ''}<button class="btn" id="pvNo">Annuler</button></div>`;
@@ -451,11 +456,13 @@ function setHeader() {
 }
 // Le grand titre rétrécit pour toujours tenir à côté des boutons (« Dimanche 15 » sur téléphone)
 function fitTitle() {
-  const h = $('#title'); h.style.fontSize = '';
+  const h = $('#title'); h.style.transition = 'none'; h.style.fontSize = '';
   let fs = parseFloat(getComputedStyle(h).fontSize), n = 0;
   while (h.scrollWidth > h.clientWidth + 1 && fs > 26 && n++ < 40) { fs -= 2; h.style.fontSize = fs + 'px'; }
+  void h.offsetWidth; h.style.transition = '';
 }
 addEventListener('resize', () => fitTitle());
+document.fonts?.ready.then(() => fitTitle());
 
 /* ---------- Rendu ---------- */
 function itemHTML(t, opts = {}) {
@@ -464,7 +471,7 @@ function itemHTML(t, opts = {}) {
   return `<div class="item ${t.done ? 'done' : ''}" data-id="${esc(t.id)}">
     <button class="check" data-act="toggle" aria-label="${t.done ? 'Remettre à faire' : 'Terminer'}">${ICON.check}</button>${lead}
     <div class="bd" data-act="open"><div class="tt">${esc(t.title)}</div>
-      <div class="mm">${t.due && !opts.noDue ? `<span class="tag ${cls}">${dueLabel(t)}</span>` : ''}${t.kind === 'devoir' ? `<span class="tag acc">${esc(t.subject || 'Devoir')}</span>` : ''}${t.kind === 'rdv' ? '<span class="tag acc">RDV</span>' : ''}${t.repeat ? `<span class="tag rep">↻ ${esc(REPEATS[t.repeat])}</span>` : ''}${t.source === 'pronote' ? '<span class="tag">Pronote</span>' : ''}${t.kind === 'revision' ? '<span class="tag rev">📖 Révision</span>' : ''}${n && !t.done && !opts.noRem ? `<span>${ICON.bell.replace('<svg', '<svg style="width:12px;height:12px;vertical-align:-2px"')} ${new Date(n.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(n.at)}</span>` : ''}</div></div>
+      <div class="mm">${t.due && !opts.noDue ? `<span class="tag ${cls}">${dueLabel(t)}</span>` : ''}${t.kind === 'devoir' && !lead ? `<span class="tag acc">${esc(t.subject || 'Devoir')}</span>` : ''}${t.kind === 'rdv' ? '<span class="tag acc">RDV</span>' : ''}${t.repeat ? `<span class="tag rep">${ICON.repeat.replace('<svg', '<svg class="ti"')}${esc(REPEATS[t.repeat])}</span>` : ''}${n && !t.done && !opts.noRem ? `<span class="rem">${ICON.bell.replace('<svg', '<svg class="ti"')}${new Date(n.at).toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')} ${fmtTime(n.at)}</span>` : ''}</div></div>
     <button class="more" data-act="open" aria-label="Détails">${ICON.dots}</button></div>`;
 }
 function bindList(root) {
@@ -560,6 +567,7 @@ function updateNow() { const c = $('#nowCard'); if (c) c.innerHTML = nowCardHTML
 
 function rToday() {
   const v = $('#v-aujourdhui'), today = startOfDay(new Date()), now = new Date();
+  if (!synced) { v.innerHTML = skel(4); return; }
   const A = active().sort(byDue);
   const next = A.find(t => daysLeft(t) !== null && daysLeft(t) >= 0);
   const late = A.filter(t => daysLeft(t) < 0);
@@ -572,10 +580,10 @@ function rToday() {
     hero = `<div class="hero">
       <div class="ring"><svg viewBox="0 0 132 132" role="img" aria-label="Échéance dans ${n} jour(s)"><circle class="bg" cx="66" cy="66" r="54"/><circle class="fg" cx="66" cy="66" r="54" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - frac)}"/></svg>
         <div class="in"><b>${n === 0 ? 'Auj.' : 'J-' + n}</b><small>${n === 0 ? 'jour J' : n === 1 ? 'demain' : fmtShort(dueDate(next))}</small></div></div>
-      <div class="info"><span class="pillTag">${esc(next.subject || (next.kind === 'devoir' ? 'Devoir' : next.kind === 'rdv' ? 'Rendez-vous' : 'Tâche'))}${next.source === 'pronote' ? ' · Pronote' : ''}</span>
+      <div class="info"><span class="pillTag">${esc(next.subject || (next.kind === 'devoir' ? 'Devoir' : next.kind === 'rdv' ? 'Rendez-vous' : 'Tâche'))}</span>
         <span class="ttl">${esc(next.title)}</span>
         <span class="meta">${rem.length ? 'Rappels : ' + rem.map(x => new Date(x.at).toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '') + ' ' + fmtTime(x.at)).join(' · ') : 'Échéance : ' + fmtDay(dueDate(next))}</span>
-        <div class="btns"><button class="btn p" id="heroDone">Marquer fait</button><button class="btn" id="heroFocus">▶ Focus</button>${next.source === 'pronote' || next.source === 'revision' ? '' : '<button class="btn" id="heroLater">Reporter</button>'}</div></div></div>`;
+        <div class="btns"><button class="btn p" id="heroDone">Marquer fait</button><button class="btn ic" id="heroFocus">${ICON.play}Focus</button>${next.source === 'pronote' || next.source === 'revision' ? '' : '<button class="btn" id="heroLater">Reporter</button>'}</div></div></div>`;
   } else hero = `<div class="hero"><div class="info"><span class="ttl">Rien à l'horizon 🙌</span><span class="meta">Ajoute une tâche avec le + ou connecte Pronote.</span></div></div>`;
 
   const row = (cls, when, inner, sort) => ({ sort, h: `<div class="row ${cls}"><span class="when">${when}</span><span class="node"></span>${inner}</div>` });
@@ -596,7 +604,7 @@ function rToday() {
   const tomorrowCours = coursOn(addDays(today, 1)).filter(c => !isOff(c));
   v.innerHTML = `<div class="today">
     <div class="colA"><div class="card nowCard" id="nowCard">${nowCardHTML()}</div>${hero}
-      <div><div class="h2">Ta journée</div><div class="tl">${rows.join('') || '<div class="empty">Journée tranquille. Rien d\'urgent ni de prévu.</div>'}</div></div>
+      <div><div class="h2">Ta journée <span class="h2s">${(() => { const nc = coursOn(today).filter(c => !isOff(c)).length, nt = late.length + soir.length; return [nc ? nc + ' cours' : '', nt ? nt + ' à faire' : ''].filter(Boolean).join(' · ') || 'libre'; })()}</span></div><div class="tl">${rows.join('') || '<div class="empty">Journée tranquille. Rien d\'urgent ni de prévu.</div>'}</div></div>
       ${later.length ? `<div class="upchips">${later.map(t => `<span><i style="background:${t.kind === 'devoir' ? subjColor(t.subject) : 'var(--dim)'}"></i>${esc(t.title.length > 22 ? t.title.slice(0, 21) + '…' : t.title)} · J-${daysLeft(t)}</span>`).join('')}</div>` : ''}
     </div>
     <div class="colB">
@@ -645,7 +653,8 @@ function segPill(sel) { requestAnimationFrame(() => { const s = $(sel); if (!s) 
 /* ---------- Notes Pronote ---------- */
 let notes = store.get('orbit.notes', null), hwTab = 'devoirs';
 async function loadNotes() {
-  try { const r = await extra('notes'); if (r.notes) { notes = r.notes; store.set('orbit.notes', notes); if (current === 'devoirs' && hwTab === 'notes') rHomework(); } } catch { /* hors ligne */ }
+  notesLoading = true;
+  try { const r = await extra('notes'); if (r.notes) { notes = r.notes; store.set('orbit.notes', notes); } } catch { /* hors ligne */ } finally { notesLoading = false; if (current === 'devoirs' && hwTab === 'notes') rHomework(); }
 }
 const num = v => typeof v === 'number' ? v : null;
 const on20 = (v, out) => num(v) == null ? null : v * 20 / (num(out) || 20);
@@ -653,7 +662,7 @@ const gradeCls = v => v == null ? '' : v >= 14 ? 'g4' : v >= 12 ? 'g3' : v >= 10
 const fmtN = v => num(v) == null ? (v ?? '—') : String(Math.round(v * 100) / 100).replace('.', ',');
 function subjParts(name) { const [m, ...rest] = String(name || '').split(' > '); const main = prettySubj(m) || m; const sub = rest.join(' › ').replace(/"/g, '').trim(); return { main, sub: sub && prettySubj(sub) !== main ? sub : '' }; }
 function notesHTML() {
-  if (!notes) return `<div class="empty" style="margin-top:12px">Les notes arrivent à la prochaine synchro Pronote.</div>`;
+  if (!notes) return notesLoading ? skel(3, 60) : `<div class="empty" style="margin-top:12px">Les notes arrivent à la prochaine synchro Pronote.</div>`;
   const ov = num(notes.overall), co = num(notes.classOverall);
   const S = (notes.subjects || []).filter(x => num(x.avg) != null).map(x => ({ ...x, ...subjParts(x.name), a20: on20(x.avg, x.outOf), c20: on20(x.classAvg, x.outOf) })).sort((a, b) => a.a20 - b.a20);
   const subj = S.map(x => `<div class="nRow"><span class="nB">${subjBadge(x.main)}</span><div class="nTx"><b>${esc(x.main)}</b>${x.sub ? `<small>${esc(x.sub)}</small>` : ''}
@@ -663,7 +672,7 @@ function notesHTML() {
       <div class="nV"><b class="${gradeCls(v20)}">${fmtN(g.value)}<span>/${fmtN(g.outOf)}</span></b>${g.avg != null ? `<small>classe ${fmtN(g.avg)}</small>` : ''}</div></div>`; }).join('');
   return `<div class="nHero card"><div><span class="nLbl">${esc(notes.period || 'Moyenne')}</span><b class="nBig ${gradeCls(ov)}">${fmtN(ov)}</b><span class="nCls">Classe : ${fmtN(co)}${ov != null && co != null ? ` · <i class="${ov >= co ? 'up' : 'dn'}">${ov >= co ? '+' : ''}${fmtN(Math.round((ov - co) * 100) / 100)}</i>` : ''}</span></div>
       <button class="btn" id="nAsk">${ICON.ia} Où bosser ?</button></div>
-    <div class="dayHead"><b>Par matière</b><span>de la plus faible à la meilleure</span></div><div class="card nList">${subj || '<div class="empty">Pas encore de moyenne</div>'}</div>
+    <div class="dayHead"><b>Moyennes par matière</b><span>les plus fragiles d'abord</span></div><div class="card nList">${subj || '<div class="empty">Pas encore de moyenne</div>'}</div>
     <div class="dayHead"><b>Dernières notes</b></div><div class="card nList">${G || '<div class="empty">Aucune note</div>'}</div>`;
 }
 function notesCtx() {
@@ -689,7 +698,7 @@ function showFocus() {
     <div class="fRing"><svg viewBox="0 0 280 280"><circle class="bg" cx="140" cy="140" r="120"/><circle class="fg" id="fArc" cx="140" cy="140" r="120" stroke-dasharray="${C}"/></svg><div class="fIn"><b id="fTime">25:00</b><small id="fEnd"></small></div></div>
     <div class="fTitle">${focus.subject ? subjBadge(focus.subject, 'sq mini') : ''}<span>${esc(focus.title)}</span></div>
     <div class="fDots" id="fDots"></div>
-    <div class="fBtns"><button class="btn" id="fPause"></button><button class="btn" id="fSkip">Passer</button>${focus.id ? '<button class="btn p" id="fDone">C\'est fini ✓</button>' : ''}<button class="btn" id="fStop">Arrêter</button></div></div>`;
+    <div class="fBtns"><button class="btn" id="fPause"></button><button class="btn" id="fSkip">Passer</button>${focus.id ? `<button class="btn p ic" id="fDone">${ICON.check}C'est fini</button>` : ''}<button class="btn" id="fStop">Arrêter</button></div></div>`;
   requestAnimationFrame(() => o.classList.add('on'));
   $('#fPause').onclick = () => { if (focus.paused) { focus.end = Date.now() + focus.paused; focus.paused = null; } else focus.paused = focus.end - Date.now(); store.set('orbit.focus', focus); tickFocus(); };
   $('#fSkip').onclick = () => nextPhase(true);
@@ -712,7 +721,7 @@ function tickFocus() {
   document.title = `${$('#fTime').textContent} · ${focus.phase === 'work' ? 'Focus' : 'Pause'}`;
 }
 function nextPhase(skip) {
-  if (focus.phase === 'work') { focus.done++; focus.phase = 'break'; focus.end = Date.now() + FOCUS_BREAK * 60e3; if (!skip) { toast('Bien joué 💪', `${focus.done} séance${focus.done > 1 ? 's' : ''} · 5 min de pause`); chime(); } }
+  if (focus.phase === 'work') { focus.done++; focus.phase = 'break'; focus.end = Date.now() + FOCUS_BREAK * 60e3; if (!skip) { toast('Bien joué', `${focus.done} séance${focus.done > 1 ? 's' : ''} · 5 min de pause`); chime(); } }
   else { focus.phase = 'work'; focus.end = Date.now() + FOCUS_WORK * 60e3; if (!skip) { toast('C\'est reparti', '25 min de concentration'); chime(); } }
   focus.paused = null; store.set('orbit.focus', focus); tickFocus();
 }
@@ -750,6 +759,7 @@ const MIC_SVG = SVG('<rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5
 
 function rHomework() {
   const v = $('#v-devoirs');
+  if (!synced) { v.innerHTML = skel(4, 76); return; }
   const H = allItems().filter(t => t.kind === 'devoir' && !t.done).sort(byDue);
   // Séances de révision : à part, regroupées par contrôle (sinon on croit à un devoir « pour dimanche »)
   const R = allItems().filter(t => t.kind === 'revision' && !t.done).sort(byDue), exams = new Map();
@@ -766,7 +776,7 @@ function rHomework() {
   const bindSeg = () => { v.querySelectorAll('#hwSeg button').forEach(b => b.onclick = () => { hwTab = b.dataset.h; rHomework(); if (hwTab === 'notes') loadNotes(); }); segPill('#hwSeg'); };
   if (hwTab === 'notes') { v.innerHTML = seg + notesHTML(); bindSeg(); const na = $('#nAsk'); if (na) na.onclick = () => { go('ia'); ask('Regarde mes notes et dis-moi dans quelles matières je dois bosser en priorité, avec un plan concret pour cette semaine.'); }; return; }
   v.innerHTML = seg + `${subjects.length ? `<div class="chipsRow" style="margin-bottom:6px">${subjects.map(s => `<span>${subjBadge(s, 'sq mini')}${esc(s)} · ${H.filter(t => (t.subject || 'Autre') === s).length}</span>`).join('')}</div>` : ''}
-    ${list || '<div class="empty" style="margin-top:12px">Aucun devoir à faire 🎉</div>'}${revHTML}
+    ${list || '<div class="empty" style="margin-top:12px">Aucun devoir à faire. Profite.</div>'}${revHTML}
     <div class="grid" style="margin-top:26px">${pronoteCardHTML()}
       <details class="fold"><summary>＋ Import manuel (copier-coller ou capture)</summary>
         <div class="steps"><div>Pronote → <b>Cahier de textes</b> → <b>Travail à faire</b>.</div><div>Colle le texte ou dépose une capture d'écran.</div></div>
@@ -953,7 +963,7 @@ function openEditor(t, isNew = false) {
       <p class="small muted" style="margin-top:4px">${t.source === 'revision' ? 'Révision · ' + (t.due ? fmtDay(dueDate(t)) + ' à 18h' : '') : 'Pronote · pour ' + (t.due ? fmtDay(dueDate(t)) : '—')}</p>
       <div style="margin-top:14px;line-height:1.55;white-space:pre-wrap">${esc(t.note || t.title)}</div>
       <label class="l">Rappels Discord</label><div class="chips">${t.reminders.map(r => `<span class="chip ${r.fired ? '' : 'acc'}">${r.label} · ${new Date(r.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(r.at)}</span>`).join('')}</div>
-      <div class="acts"><button class="btn p" id="eDone">${t.done ? 'Remettre à faire' : 'Marquer fait'}</button>${t.done ? '' : '<button class="btn" id="eFocus">▶ Focus 25 min</button>'}${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}<button class="btn" id="eX">Fermer</button></div>`;
+      <div class="acts"><button class="btn p" id="eDone">${t.done ? 'Remettre à faire' : 'Marquer fait'}</button>${t.done ? '' : `<button class="btn ic" id="eFocus">${ICON.play}Focus 25 min</button>`}${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}<button class="btn" id="eX">Fermer</button></div>`;
     $('#eDone').onclick = () => { closeSheet(); completeTask(t, !t.done); };
     const ef = $('#eFocus'); if (ef) ef.onclick = () => startFocus(t);
     $('#eX').onclick = closeSheet; openSheet(); return;
@@ -965,7 +975,7 @@ function openEditor(t, isNew = false) {
     <label class="l" for="eS">Matière</label><input class="inp" id="eS" value="${esc(t.subject || '')}" placeholder="—">
     <label class="l" for="eN">Note</label><textarea class="inp" id="eN" rows="2">${esc(t.note || '')}</textarea>
     <label class="l">Rappels Discord</label><div class="chips">${(t.reminders || []).map(r => `<span class="chip ${r.fired ? '' : 'acc'}">${r.label} · ${new Date(r.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${fmtTime(r.at)}</span>`).join('') || `<span class="chip">${t.due ? (dueDate(t) < new Date() ? 'Date passée : plus de rappel' : 'Plus de rappel prévu') : 'Aucun (ajoute une date)'}</span>`}</div>
-    <div class="acts"><button class="btn p" id="eSave">Enregistrer</button>${isNew || t.done ? '' : '<button class="btn" id="eFocus">▶ Focus</button>'}${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}${isNew ? '' : '<button class="btn" id="eDel" style="color:#ff6b6b">Supprimer</button>'}<button class="btn" id="eX">Fermer</button></div>`;
+    <div class="acts"><button class="btn p" id="eSave">Enregistrer</button>${isNew || t.done ? '' : `<button class="btn ic" id="eFocus">${ICON.play}Focus</button>`}${link ? `<a class="btn" href="${link}" target="_blank" rel="noopener">Ajouter à Google Agenda</a>` : ''}${isNew ? '' : '<button class="btn" id="eDel" style="color:#ff6b6b">Supprimer</button>'}<button class="btn" id="eX">Fermer</button></div>`;
   $('#eK').value = t.kind || 'tache'; $('#eR').value = t.repeat || '';
   $('#eSave').onclick = () => {
     const nt = { ...t, title: $('#eT').value.trim() || t.title, due: $('#eD').value || null, time: $('#eH').value || null, kind: $('#eK').value, repeat: $('#eR').value || null, subject: $('#eS').value.trim() || null, note: $('#eN').value.trim() || null };
@@ -1110,9 +1120,11 @@ function bindPronoteCard() {
 }
 
 /* ---------- Toasts & rappels dans l'app ---------- */
-function toast(title, sub) {
-  const t = el('div', 'toast', `<div class="ic">${ICON.bell}</div><div><b>${esc(title)}</b><span>${esc(sub || '')}</span></div>`);
-  $('#toasts').appendChild(t); setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 320); }, 3600);
+function toast(title, sub, opt = {}) {
+  const t = el('div', 'toast' + (opt.ok ? ' ok' : ''), `<div class="ic">${opt.ok ? ICON.check : ICON.bell}</div><div class="tx"><b>${esc(title)}</b><span>${esc(sub || '')}</span></div>${opt.undo ? `<button class="undo">${ICON.undo}Annuler</button>` : ''}`);
+  const close = () => { t.classList.add('out'); setTimeout(() => t.remove(), 320); };
+  if (opt.undo) t.querySelector('.undo').onclick = () => { opt.undo(); close(); };
+  $('#toasts').appendChild(t); setTimeout(close, opt.undo ? 5000 : 3600);
 }
 // Quand Orbit est ouvert, un rappel qui tombe s'affiche aussi ici (Discord reste la notification principale)
 function checkReminders() {
