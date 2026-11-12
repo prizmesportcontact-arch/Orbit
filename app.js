@@ -509,7 +509,9 @@ function render() {
   ({ aujourdhui: rToday, taches: rTasks, devoirs: rHomework, agenda: rAgenda, ia: rAI })[current]();
 }
 function coursOn(d) { return (server.cours || []).filter(c => sameDay(c.starts_at, d)); }
-function eventsOn(d) { const a = startOfDay(d), b = addDays(a, 1); return (server.gcal || []).filter(e => e.allDay ? new Date(e.start) < b && new Date(e.end) > a : sameDay(e.start, d)); }
+// Les « 📚 … (MATIÈRE) » de Google Agenda sont d'anciennes copies des devoirs Pronote faites par la 1re version d'Orbit : on les masque (doublons)
+const gcalEvents = () => (server.gcal || []).filter(e => !/^📚/u.test(e.title || ''));
+function eventsOn(d) { const a = startOfDay(d), b = addDays(a, 1); return gcalEvents().filter(e => e.allDay ? new Date(e.start) < b && new Date(e.end) > a : sameDay(e.start, d)); }
 const teacherName = t => t ? String(t).split(',')[0].trim().replace(/^(\S+)\s+(\S)\.?$/, (m, a, b) => cap(a.toLowerCase()) + ' ' + b + '.') : '';
 function coursHTML(c) {
   const s = prettySubj(c.subject) || 'Cours';
@@ -788,7 +790,9 @@ function rHomework() {
   const seg = `<div class="seg hwSeg" id="hwSeg"><div class="pill"></div><button data-h="devoirs" class="${hwTab === 'devoirs' ? 'on' : ''}">Devoirs</button><button data-h="notes" class="${hwTab === 'notes' ? 'on' : ''}">Notes${notes && num(notes.overall) != null ? ' · ' + fmtN(notes.overall) : ''}</button></div>`;
   const bindSeg = () => { v.querySelectorAll('#hwSeg button').forEach(b => b.onclick = () => { hwTab = b.dataset.h; rHomework(); if (hwTab === 'notes') loadNotes(); }); segPill('#hwSeg'); };
   if (hwTab === 'notes') { v.innerHTML = seg + notesHTML(); bindSeg(); const na = $('#nAsk'); if (na) na.onclick = () => { go('ia'); ask('Regarde mes notes et dis-moi dans quelles matières je dois bosser en priorité, avec un plan concret pour cette semaine.'); }; return; }
-  v.innerHTML = seg + `${subjects.length ? `<div class="chipsRow" style="margin-bottom:6px">${subjects.map(s => `<span>${subjBadge(s, 'sq mini')}${esc(s)} · ${H.filter(t => (t.subject || 'Autre') === s).length}</span>`).join('')}</div>` : ''}
+  const pe = server.pronote?.connected && server.pronote?.last_error;
+  const warn = pe ? `<div class="pnWarn"><b>Pronote ne se synchronise plus</b><span>Dernière mise à jour : ${server.pronote.last_sync ? new Date(server.pronote.last_sync).toLocaleString('fr-FR', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) : '—'}. Reconnecte-toi avec le QR code.</span><button class="btn p sm" id="pnWarnBtn">Reconnecter</button></div>` : '';
+  v.innerHTML = seg + warn + `${subjects.length ? `<div class="chipsRow" style="margin-bottom:6px">${subjects.map(s => `<span>${subjBadge(s, 'sq mini')}${esc(s)} · ${H.filter(t => (t.subject || 'Autre') === s).length}</span>`).join('')}</div>` : ''}
     ${list || '<div class="empty" style="margin-top:12px">Aucun devoir à faire. Profite.</div>'}${revHTML}
     <div class="grid" style="margin-top:26px">${pronoteCardHTML()}
       <details class="fold"><summary>＋ Import manuel (copier-coller ou capture)</summary>
@@ -799,6 +803,7 @@ function rHomework() {
         <div id="pnOut" class="small muted" style="margin-top:10px">${server.flags?.ai ? '' : 'Nécessite une clé IA (Réglages). Les captures demandent Gemini.'}</div>
       </details></div>`;
   bindList(v); bindPronoteCard(); bindSeg();
+  const pw = $('#pnWarnBtn'); if (pw) pw.onclick = () => { const r = $('#pnRelink'); if (r) { r.scrollIntoView({ behavior: 'smooth', block: 'center' }); r.click(); } };
   let files = [];
   const dz = $('#pnDrop'), take = fs => { files = [...fs].filter(f => f.type.startsWith('image/')); dz.textContent = `📷 ${files.length} capture${files.length > 1 ? 's' : ''} prête${files.length > 1 ? 's' : ''}`; };
   $('#pnFile').onchange = e => take(e.target.files);

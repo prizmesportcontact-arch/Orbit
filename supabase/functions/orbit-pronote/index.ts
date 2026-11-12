@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
     const wasConnected = !!row.token && !/pas encore connecté/.test(msg);
     const lastAlert = row.last_alert ? new Date(row.last_alert).getTime() : 0;
     if (mode === "sync" && wasConnected && fails >= 2 && Date.now() - lastAlert > 12 * 3600e3) {
-      const expired = /SessionExpired|Authenticate|BadCredentials|token/i.test(msg);
+      const expired = /SessionExpired|Authenticate|BadCredentials|token|Identification/i.test(msg);
       await db.from("orbit_rappels").upsert({
         id: "alert:pronote:" + new Date().toISOString().slice(0, 13), source: "orbit",
         title: expired ? "Pronote déconnecté : rescanne le QR code dans Orbit" : "La synchro Pronote ne marche plus",

@@ -576,3 +576,5 @@ h1,h2,h3,.h2,.ttl,.hero .ttl,.dayHead b,.chatHello h3,.fTitle span,.item .tt,.nT
 .toast.ok .ic{background:var(--ok)}
 .toast .undo{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:11px;background:var(--card2);font-weight:700;font-size:13px;color:var(--txt);flex:none}
 .toast .undo svg{width:14px;height:14px}
+.pnWarn{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:14px 16px;margin-bottom:14px;border-radius:var(--r2);background:color-mix(in srgb,#ff4d5e 14%,var(--card));border:1px solid color-mix(in srgb,#ff4d5e 45%,transparent)}
+.pnWarn b{color:#ff8a94}.pnWarn span{font-size:13.5px;color:var(--mut)}.pnWarn .btn{margin-top:4px}
