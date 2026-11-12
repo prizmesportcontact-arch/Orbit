@@ -5,6 +5,7 @@
 'use strict';
 const API = 'https://cbbnrdfvaaikawszaysu.supabase.co/functions/v1/orbit-api';
 const EXTRA = 'https://cbbnrdfvaaikawszaysu.supabase.co/functions/v1/orbit-extra';
+const BUSFN = 'https://cbbnrdfvaaikawszaysu.supabase.co/functions/v1/orbit-bus';
 const $ = s => document.querySelector(s);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -30,9 +31,11 @@ const ICON = {
   bell: SVG('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>'),
   plus: SVG('<path d="M12 5v14M5 12h14"/>', 2.6),
   send: SVG('<path d="M5 12h14M13 6l6 6-6 6"/>', 2.4),
+  bus: SVG('<rect x="4" y="3" width="16" height="15" rx="3"/><path d="M4 11h16M8 18v3M16 18v3"/><circle cx="8.5" cy="14.5" r=".6" fill="currentColor"/><circle cx="15.5" cy="14.5" r=".6" fill="currentColor"/>'),
+  walk: SVG('<circle cx="13" cy="4" r="2"/><path d="M9 21l2.5-6.5L14 17v4M7.5 11.5L10 8l3.5 1 2 3.5H18M10 8l1.5 6.5"/>'),
   repeat: SVG('<path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
 };
-const TABS = [['aujourdhui', "Aujourd'hui"], ['taches', 'Tâches'], ['devoirs', 'Devoirs'], ['agenda', 'Agenda'], ['ia', 'Assistant']];
+const TABS = [['aujourdhui', "Aujourd'hui"], ['taches', 'Tâches'], ['devoirs', 'Devoirs'], ['agenda', 'Agenda'], ['bus', 'Bus'], ['ia', 'Assistant']];
 const ACCENTS = { corail: ['#ff6a47', '#ff8c70', '#3a221b'], ambre: ['#ffb23f', '#ffc56e', '#3a2c16'], rose: ['#ff4f8b', '#ff86ae', '#3a1b27'], menthe: ['#4fd1a5', '#7fe0bf', '#16332a'], bleu: ['#6f9bff', '#9ab9ff', '#1c2540'] };
 const REPEATS = { '': 'Jamais', daily: 'Tous les jours', weekdays: 'En semaine (lun-ven)', weekly: 'Chaque semaine', biweekly: 'Toutes les 2 semaines', monthly: 'Chaque mois' };
 
@@ -437,7 +440,7 @@ function buildNav() {
     const b = el('button', '', `${ICON[k]}<span>${label}</span><span class="badge" data-badge="${k}" hidden></span>`);
     b.dataset.k = k; b.setAttribute('aria-label', label); b.onclick = () => go(k); side.appendChild(b);
   });
-  ['aujourdhui', 'taches', '+', 'devoirs', 'agenda'].forEach(k => {
+  ['aujourdhui', 'taches', '+', 'devoirs', 'agenda', 'bus'].forEach(k => {
     if (k === '+') { const p = el('button', 'plus', ICON.plus); p.setAttribute('aria-label', 'Ajouter'); p.onclick = () => toggleCapture(); bar.appendChild(p); return; }
     const label = TABS.find(t => t[0] === k)[1];
     const b = el('button', '', `${ICON[k]}<span>${label}</span>`); b.dataset.k = k; b.setAttribute('aria-label', label); b.onclick = () => go(k); bar.appendChild(b);
@@ -545,7 +548,7 @@ function render() {
   const st = [[online, 'Synchro'], [server.flags?.ai, 'IA'], [server.flags?.ical, 'Google Agenda'], [server.pronote?.connected && !server.pronote?.last_error, 'Pronote']];
   $('#status').innerHTML = st.map(([on, l]) => `<span class="dot ${on ? 'on' : ''}" title="${l} : ${on ? 'actif' : 'inactif'}"></span>`).join('');
   if (current === 'ia' && asking) return; // la conversation se met à jour toute seule à la réponse
-  ({ aujourdhui: rToday, taches: rTasks, devoirs: rHomework, agenda: rAgenda, ia: rAI })[current]();
+  ({ aujourdhui: rToday, taches: rTasks, devoirs: rHomework, agenda: rAgenda, ia: rAI, bus: rBus })[current]();
 }
 function coursOn(d) { return (server.cours || []).filter(c => sameDay(c.starts_at, d)); }
 // Les « 📚 … (MATIÈRE) » de Google Agenda sont d'anciennes copies des devoirs Pronote faites par la 1re version d'Orbit : on les masque (doublons)
@@ -561,6 +564,150 @@ function coursHTML(c) {
 }
 function evHTML(e) {
   return `<div class="item"><div class="bar gbar"></div><div class="bd"><div class="tt">${esc(e.title)}</div><div class="mm"><span class="tag">${e.allDay ? 'Journée' : fmtTime(e.start) + (e.end ? ' – ' + fmtTime(e.end) : '')}</span>${e.location ? `<span>${esc(e.location)}</span>` : ''}<span class="tag ok">Google</span></div></div></div>`;
+}
+
+
+/* ---------- Bus : trajets maison ↔ lycée (Île-de-France Mobilités) ---------- */
+const HOMES = { ponthevrard: 'Ponthévrard', starnoult: 'Saint-Arnoult' };
+const weekIdx = d => Math.floor(Math.round((startOfDay(d) - new Date(2024, 0, 1)) / 864e5) / 7); // semaines depuis un lundi
+function homeFor(d) {
+  const b = settings.bus; if (!b || !HOMES[b.ref]) return null;
+  const odd = ((weekIdx(d) - b.week) % 2 + 2) % 2;
+  return odd ? (b.ref === 'ponthevrard' ? 'starnoult' : 'ponthevrard') : b.ref;
+}
+const navDT = d => { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}00`; };
+const busCache = new Map();
+async function busCall(action, body, ttl = 180e3) {
+  const k = action + JSON.stringify(body), hit = busCache.get(k);
+  if (hit && Date.now() - hit.t < ttl) return hit.p;
+  const p = fetch(BUSFN, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-orbit-app': key || '' }, body: JSON.stringify({ action, ...body }) })
+    .then(r => r.json()).then(j => { if (!j.ok) throw new Error(j.error || 'Bus indisponible'); return j; });
+  busCache.set(k, { t: Date.now(), p }); p.catch(() => busCache.delete(k));
+  return p;
+}
+// Le jour de cours qui compte : aujourd'hui tant que ce n'est pas fini (+1 h 30 pour rentrer), sinon le prochain
+function busDay(now = new Date()) {
+  for (let i = 0; i <= 7; i++) {
+    const d = addDays(startOfDay(now), i), C = coursOn(d).filter(c => !isOff(c)).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+    if (!C.length) continue;
+    const first = new Date(C[0].starts_at), last = new Date(Math.max(...C.map(c => new Date(c.ends_at).getTime())));
+    if (i === 0 && now > new Date(last.getTime() + 90 * 6e4)) continue;
+    return { d, i, first, last, firstSubj: prettySubj(C[0].subject) || 'Cours' };
+  }
+  return null;
+}
+async function busTrips(day) {
+  const home = homeFor(day.d); if (!home) return null;
+  const now = new Date();
+  const goTarget = new Date(day.first.getTime() - 5 * 6e4);
+  let aller = null, retour = null;
+  if (now < day.first) {
+    aller = await busCall('journeys', { from: home, to: 'lycee', datetime: navDT(goTarget), represents: 'arrival', count: 3 });
+    if (!aller.journeys.length) { // aucun bus n'arrive à temps : on montre les premiers quand même
+      aller = await busCall('journeys', { from: home, to: 'lycee', datetime: navDT(new Date(day.first.getTime() - 3 * 36e5)), represents: 'departure', count: 3 });
+      aller.late = true;
+    }
+    aller.journeys = aller.journeys.filter(j => new Date(j.dep) > new Date(now.getTime() - 2 * 6e4)).slice(-3);
+  }
+  const back = new Date(Math.max(day.last.getTime() + 5 * 6e4, now.getTime()));
+  retour = await busCall('journeys', { from: 'lycee', to: home, datetime: navDT(back), represents: 'departure', count: 3 });
+  return { home, aller, retour, target: day.first };
+}
+const minsTo = t => Math.round((new Date(t) - Date.now()) / 6e4);
+const inMin = m => m <= 0 ? 'maintenant' : m < 60 ? `dans ${m} min` : `dans ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
+const lineChip = l => `<span class="lnChip" style="--lc:${l?.color || '#5B8CFF'};--lt:${l?.text || '#fff'}">${ICON.bus}${esc(l?.code || 'Bus')}</span>`;
+const firstPt = j => j.sections.find(x => x.type === 'pt');
+function journeyHTML(j, target, open) {
+  const pt = j.sections.filter(x => x.type === 'pt'), f = pt[0];
+  const late = target && new Date(j.arr) > target;
+  const chain = j.sections.filter(x => x.type === 'pt' || (x.type === 'walk' && x.duration >= 120)).map(x => x.type === 'pt' ? lineChip(x.line) : `<span class="wkChip">${ICON.walk}${Math.round(x.duration / 60)}</span>`).join('<i class="jrSep"></i>');
+  const steps = j.sections.map(x => {
+    if (x.type === 'pt') return `<li class="pt"><b>${fmtTime(x.dep)}</b><span>${lineChip(x.line)} depuis <b>${esc(x.from)}</b>${x.line?.direction ? `, direction ${esc(x.line.direction)}` : ''}. Descends à <b>${esc(x.to)}</b> (${fmtTime(x.arr)}).</span></li>`;
+    if (x.type === 'walk' && x.duration >= 60) return `<li><b>${fmtTime(x.dep)}</b><span>Marche ${Math.round(x.duration / 60)} min jusqu'à ${esc(x.to.replace(/^\d+\s+Square Pierre Fite$/, 'au lycée'))}</span></li>`;
+    if (x.type === 'waiting') return `<li><b>${fmtTime(x.dep)}</b><span>Attente ${Math.round(x.duration / 60)} min</span></li>`;
+    return '';
+  }).join('');
+  const m = minsTo(j.dep);
+  return `<details class="jr${late ? ' late' : ''}"${open ? ' open' : ''}><summary>
+      <div class="jrT"><b>${fmtTime(j.dep)}</b><span>arrivée ${fmtTime(j.arr)}</span></div>
+      <div class="jrM"><div class="jrC">${chain}</div><small>${f ? `Arrêt ${esc(f.from)}` : ''}${j.transfers ? `, ${j.transfers} correspondance${j.transfers > 1 ? 's' : ''}` : ', direct'}${late ? ', <em>arrive après le début du cours</em>' : ''}</small></div>
+      <div class="jrIn">${m > -2 && m < 600 ? inMin(m) : ''}</div></summary>
+    <ol class="jrSteps">${steps}</ol>${f && sameDay(f.dep, new Date()) ? `<div class="jrRT" data-stop="${esc(f.stopId || '')}" data-line="${esc(f.lineId || '')}" data-dep="${esc(f.dep)}"><span class="spin"></span> Temps réel…</div>` : ''}</details>`;
+}
+async function fillRealtime(root) {
+  for (const el of root.querySelectorAll('.jrRT[data-stop]')) {
+    if (!el.dataset.stop) { el.remove(); continue; }
+    try {
+      const r = await busCall('next', { stopId: el.dataset.stop, lineId: el.dataset.line }, 30e3);
+      const want = new Date(el.dataset.dep).getTime();
+      const P = r.passes.map(p => ({ ...p, t: new Date(p.expected || p.aimed).getTime(), a: p.aimed ? new Date(p.aimed).getTime() : null }));
+      if (!P.length) { el.innerHTML = 'Pas encore de temps réel pour cet arrêt (il arrive en général 1 h avant).'; continue; }
+      const match = P.reduce((b, p) => Math.abs((p.a ?? p.t) - want) < Math.abs((b.a ?? b.t) - want) ? p : b);
+      const delay = match.a ? Math.round((match.t - match.a) / 6e4) : 0;
+      const close = Math.abs((match.a ?? match.t) - want) < 15 * 6e4;
+      el.innerHTML = `<i class="liveDot"></i>${close ? `Ton bus passe à <b>${fmtTime(match.t)}</b>${delay > 0 ? ` <em>(+${delay} min)</em>` : delay < 0 ? ` (${delay} min)` : ', à l\'heure'}. ` : 'Temps réel. '}Prochains passages : ${P.slice(0, 3).map(p => `${fmtTime(p.t)}`).join(', ')}`;
+      el.classList.toggle('bad', close && delay >= 3);
+    } catch { el.innerHTML = 'Temps réel indisponible pour le moment.'; }
+  }
+}
+function busWeekSeg() {
+  const cur = homeFor(new Date());
+  return `<div class="busWhere"><span>Cette semaine, je pars de</span><div class="seg" id="busSeg"><div class="pill"></div>${Object.entries(HOMES).map(([k, l]) => `<button data-h="${k}" class="${cur === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>`;
+}
+let busBusy = false;
+async function rBus() {
+  const v = $('#v-bus'), day = busDay();
+  const bindSeg = () => { segPill('#busSeg'); v.querySelectorAll('#busSeg button').forEach(b => b.onclick = () => { settings.bus = { ref: b.dataset.h, week: weekIdx(new Date()) }; saveSettings(); rBus(); }); };
+  if (!settings.bus) { v.innerHTML = busWeekSeg() + `<div class="empty" style="margin-top:14px">Choisis où tu dors cette semaine. Orbit alterne tout seul chaque lundi entre Ponthévrard et Saint-Arnoult. Tu pourras corriger à tout moment ici.</div>`; bindSeg(); return; }
+  if (!day) { v.innerHTML = busWeekSeg() + `<div class="empty" style="margin-top:14px">Pas de cours dans les 7 prochains jours, donc pas de trajet à prévoir.</div>`; bindSeg(); return; }
+  const dayLbl = day.i === 0 ? "aujourd'hui" : day.i === 1 ? 'demain' : day.d.toLocaleDateString('fr-FR', { weekday: 'long' });
+  const home = homeFor(day.d);
+  if (!v.querySelector('.busWrap')) v.innerHTML = busWeekSeg() + `<div class="busWrap">${skel(3, 84)}</div>`;
+  else v.querySelector('.busWhere').outerHTML = busWeekSeg();
+  bindSeg();
+  if (busBusy) return; busBusy = true;
+  try {
+    const T = await busTrips(day);
+    const W = v.querySelector('.busWrap'); if (!W) return;
+    const changeNote = homeFor(day.d) !== homeFor(new Date()) ? ` (tu seras à ${HOMES[home]})` : '';
+    const al = T.aller, re = T.retour;
+    const dis = [...(al?.disruptions || []), ...(re?.disruptions || [])].filter((d, i, A) => d.text && A.findIndex(x => x.text === d.text) === i).slice(0, 3);
+    const html = `${dis.length ? `<div class="pnWarn"><b>Perturbations sur le réseau</b>${dis.map(d => `<span>${esc(d.text)}</span>`).join('')}</div>` : ''}
+      ${al ? `<div class="dayHead"><b>Aller ${dayLbl}</b><span>${esc(day.firstSubj)} à ${fmtTime(day.first)}${changeNote}</span></div>
+        ${al.late ? `<div class="busNote">Aucun bus n'arrive avant ${fmtTime(day.first)} depuis ${HOMES[home]}. Voici les premiers de la journée.</div>` : ''}
+        <div class="jrList">${al.journeys.map((j, i) => journeyHTML(j, day.first, i === (al.late ? 0 : al.journeys.length - 1))).join('') || '<div class="empty">Aucun trajet trouvé.</div>'}</div>` : ''}
+      <div class="dayHead"><b>Retour ${dayLbl}</b><span>fin des cours à ${fmtTime(day.last)}, vers ${HOMES[home]}</span></div>
+      <div class="jrList">${re.journeys.map((j, i) => journeyHTML(j, null, !al && i === 0)).join('') || '<div class="empty">Aucun trajet trouvé.</div>'}</div>
+      <div class="small muted" style="margin-top:16px">Horaires et temps réel : Île-de-France Mobilités. Touche un trajet pour voir le détail.</div>`;
+    if (W.dataset.sig === html) return; W.dataset.sig = html; W.innerHTML = html;
+    fillRealtime(W);
+    W.querySelectorAll('details.jr').forEach(d => d.ontoggle = () => { if (d.open) fillRealtime(d); });
+  } catch (e) {
+    const W = v.querySelector('.busWrap'); if (W) W.innerHTML = `<div class="empty">Impossible de charger les bus : ${esc(e.message || 'erreur')}. <a href="#" id="busRetry">Réessayer</a></div>`;
+    const r = $('#busRetry'); if (r) r.onclick = ev => { ev.preventDefault(); rBus(); };
+  } finally { busBusy = false; }
+}
+// Accueil : la carte bus apparaît le matin avant les cours et à la sortie
+let busHomeSig = '';
+async function busHome() {
+  const box = $('#busHome'); if (!box) return;
+  const now = new Date(), day = busDay(now);
+  if (!day || day.i !== 0 || !settings.bus) { box.innerHTML = ''; return; }
+  const morning = now < day.first && day.first - now < 3 * 36e5, after = now > new Date(day.last - 45 * 6e4) && now < new Date(day.last.getTime() + 90 * 6e4);
+  if (!morning && !after) { box.innerHTML = ''; return; }
+  try {
+    const T = await busTrips(day); const L = morning ? T.aller : T.retour; if (!L) return;
+    const J = L.journeys.filter(j => minsTo(j.dep) >= -1);
+    const j = morning ? (L.late ? J[0] : J.filter(x => new Date(x.arr) <= day.first).pop() || J[0]) : J[0];
+    if (!j) { box.innerHTML = ''; return; }
+    const f = firstPt(j), m = minsTo(j.dep), sig = j.dep + m;
+    if (sig === busHomeSig && box.innerHTML) return; busHomeSig = sig;
+    box.innerHTML = `<button class="card busCard${m <= 10 ? ' hot' : ''}" id="busCardBtn">
+      <div class="bcTop"><span>${morning ? 'Bus pour le lycée' : `Bus pour ${HOMES[T.home]}`}</span><b>${inMin(m)}</b></div>
+      <div class="bcMain"><b>Pars à ${fmtTime(j.dep)}</b>${f ? lineChip(f.line) : ''}</div>
+      <small>${f ? `Arrêt ${esc(f.from)}, bus à ${fmtTime(f.dep)}. ` : ''}Arrivée ${fmtTime(j.arr)}${morning && L.late ? ', après le début du cours' : ''}.</small></button>`;
+    $('#busCardBtn').onclick = () => go('bus');
+  } catch { box.innerHTML = ''; }
 }
 
 /* ---------- « Maintenant » : où j'en suis dans ma journée ---------- */
@@ -618,7 +765,7 @@ function nowCardHTML() {
   const cancHTML = upC.length ? `<div class="cancelBox"><b>${upC.length} cours annulé${upC.length > 1 ? 's' : ''} aujourd'hui</b>${upC.map(c => `<span>${fmtTime(c.start)} · ${esc(c.title)}${c.why ? ' — ' + esc(c.why) : ''}</span>`).join('')}</div>` : '';
   return main + after + cancHTML + bar;
 }
-function updateNow() { const c = $('#nowCard'); if (c) c.innerHTML = nowCardHTML(); }
+function updateNow() { const c = $('#nowCard'); if (c) c.innerHTML = nowCardHTML(); busHome(); }
 
 function rToday() {
   const v = $('#v-aujourdhui'), today = startOfDay(new Date()), now = new Date();
@@ -659,7 +806,7 @@ function rToday() {
   const subjHTML = Object.entries(subjects).slice(0, 6).map(([k, L]) => { const n = Math.min(...L.map(t => daysLeft(t) ?? 99)); return `<div class="subj">${subjBadge(k, 'sq')}<span>${esc(k)} <small class="muted" style="font-weight:500">· ${L.length}</small></span><b>${n < 0 ? '!' : n === 0 ? 'Auj.' : n === 1 ? 'Dem.' : 'J-' + n}</b></div>`; }).join('');
   const tomorrowCours = coursOn(addDays(today, 1)).filter(c => !isOff(c));
   v.innerHTML = `<div class="today">
-    <div class="colA"><div class="card nowCard" id="nowCard">${nowCardHTML()}</div>${hero}
+    <div class="colA"><div class="card nowCard" id="nowCard">${nowCardHTML()}</div><div id="busHome"></div>${hero}
       <div><div class="h2">Ta journée <span class="h2s">${(() => { const nc = coursOn(today).filter(c => !isOff(c)).length, nt = late.length + soir.length; return [nc ? nc + ' cours' : '', nt ? nt + ' à faire' : ''].filter(Boolean).join(' · ') || 'libre'; })()}</span></div><div class="tl">${rows.join('') || '<div class="empty">Journée tranquille. Rien d\'urgent ni de prévu.</div>'}</div></div>
       ${later.length ? `<div class="upchips">${later.map(t => `<span><i style="background:${t.kind === 'devoir' ? subjColor(t.subject) : 'var(--dim)'}"></i>${esc(t.title.length > 22 ? t.title.slice(0, 21) + '…' : t.title)} · J-${daysLeft(t)}</span>`).join('')}</div>` : ''}
     </div>
@@ -678,6 +825,7 @@ function rToday() {
     const hl = $('#heroLater'); if (hl) hl.onclick = () => { const d = addDays(dueDate(next), 1); const nt = { ...next, due: ymd(d) }; nt.reminders = buildReminders(nt); saveTask(nt); toast('Reporté', 'au ' + fmtDay(d)); };
   }
   const br = $('#brief'); if (br) br.onclick = dailyBrief;
+  busHome();
   $('#miniAsk').onsubmit = e => { e.preventDefault(); const q = e.target.querySelector('input').value.trim(); if (!q) return; go('ia'); ask(q); };
 }
 

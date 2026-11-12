@@ -625,6 +625,50 @@ pre.code{white-space:pre-wrap;font-size:13px;background:var(--s2);padding:10px 1
 .fDots{display:flex;gap:8px}.fDots i{width:8px;height:8px;border-radius:50%;background:var(--s3)}.fDots i.on{background:var(--txt)}
 .fBtns{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px}
 
+
+/* ---------- Bus ---------- */
+.busWhere{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;margin-bottom:6px}
+.busWhere>span{font-size:14px;color:var(--mut)}
+.busNote{font-size:14px;color:var(--warn);margin:-2px 2px 10px}
+.jrList{display:flex;flex-direction:column;gap:8px}
+.jr{background:var(--s1);border-radius:var(--r2);overflow:hidden}
+.jr summary{list-style:none;display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;min-height:72px}
+.jr summary::-webkit-details-marker{display:none}
+.jrT{display:flex;flex-direction:column;flex:none;width:76px}
+.jrT b{font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.jrT span{font-size:12px;color:var(--mut);margin-top:4px;font-variant-numeric:tabular-nums}
+.jrM{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.jrM small{font-size:13px;color:var(--mut);overflow:hidden;text-overflow:ellipsis}
+.jrM em{font-style:normal;color:var(--warn)}
+.jr.late .jrT b{color:var(--warn)}
+.jrC{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.jrSep{width:8px;height:2px;border-radius:2px;background:var(--s4)}
+.lnChip{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px 0 6px;border-radius:7px;background:var(--lc);color:var(--lt);font-size:13px;font-weight:700;vertical-align:middle;font-variant-numeric:tabular-nums}
+.lnChip svg{width:14px;height:14px}
+.wkChip{display:inline-flex;align-items:center;gap:2px;font-size:13px;font-weight:600;color:var(--mut)}
+.wkChip svg{width:15px;height:15px}
+.jrIn{flex:none;font-size:13px;font-weight:600;color:var(--txt);text-align:right}
+.jrSteps{list-style:none;margin:0;padding:4px 16px 12px;display:flex;flex-direction:column;box-shadow:inset 0 1px 0 var(--line)}
+.jrSteps li{display:flex;gap:12px;padding:9px 0;font-size:14px;line-height:1.45;color:var(--mut)}
+.jrSteps li+li{box-shadow:inset 0 1px 0 var(--line)}
+.jrSteps li>b{width:44px;flex:none;color:var(--txt);font-weight:600;font-variant-numeric:tabular-nums}
+.jrSteps li span b{color:var(--txt);font-weight:600}
+.jrRT{display:block;line-height:1.5;margin:0 16px 14px;padding:10px 12px;border-radius:var(--r1);background:var(--s2);font-size:14px;color:var(--mut)}
+.jrRT b{color:var(--txt)}.jrRT em{font-style:normal;color:var(--warn);font-weight:600}
+.jrRT.bad{box-shadow:inset 3px 0 0 var(--warn)}
+.jrRT .spin{width:14px;height:14px;display:inline-block;vertical-align:-2px;margin-right:6px}
+.jrRT .liveDot{display:inline-block;margin-right:8px;vertical-align:1px}
+.busCard{display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;color:var(--txt);padding:18px 20px}
+.busCard.hot{box-shadow:inset 0 0 0 1.5px var(--acc)}
+.bcTop{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--mut)}
+.bcTop b{color:var(--txt);font-weight:700;font-variant-numeric:tabular-nums}
+.busCard.hot .bcTop b{color:var(--acc)}
+.bcMain{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bcMain>b{font-size:26px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.busCard small{font-size:14px;color:var(--mut)}
+#busHome:empty{display:none}
+@media (max-width:699px){.jr summary{gap:12px;padding:12px 14px}.jrT{width:64px}.jrT b{font-size:22px}.jrIn{display:none}.tabbar button,.tabbar .plus{width:50px}.tabbar .pill{width:50px}}
+body.glass :is(.jr,.busCard){position:relative;background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.05) 38%,rgba(255,255,255,.02) 62%,rgba(255,255,255,.08))!important;-webkit-backdrop-filter:blur(26px) saturate(220%);backdrop-filter:blur(26px) saturate(220%);box-shadow:inset 0 1.5px 1px -.5px rgba(255,255,255,.7),inset 0 0 22px rgba(255,255,255,.06)}
 /* ---------- Tablette (rail d'icônes, une colonne large) ---------- */
 @media (max-width:1100px){
   .view>.today .colB{max-width:none;flex-basis:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));align-items:start}
