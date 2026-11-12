@@ -425,6 +425,7 @@ label.l{display:block;font-size:14px;font-weight:600;color:var(--mut);margin:16p
 .sheet .grab{width:40px;height:5px;border-radius:9px;background:var(--s4);margin:4px auto 18px}
 .sheet h2{font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1.1}
 .sheet .acts{display:flex;gap:8px;margin-top:20px;flex-wrap:wrap}
+@media (min-width:700px){.sheet{bottom:auto;top:50%;border-radius:var(--r3);transform:translate(-50%,-46%) scale(.97);opacity:0;pointer-events:none;transition:transform .3s var(--ease),opacity .25s}.sheet.on{transform:translate(-50%,-50%);opacity:1;pointer-events:auto}.sheet .grab{display:none}.sheet h2{margin-top:10px}}
 .sheet .card{background:var(--s2);border-radius:var(--r2)}
 .sheet .seg,.sheet .chipsRow>span{background:var(--s2)}.sheet .seg .pill{background:var(--s4)}
 .sheet .card .seg{background:var(--s3)}
@@ -700,7 +701,7 @@ body.glass{--s1:rgba(255,255,255,.06);--s2:rgba(255,255,255,.09);--s3:rgba(255,2
 body.glass .rbNow{box-shadow:0 0 0 3px rgba(0,0,0,.5)}
 /* le verre : flou + saturation, bord biseauté, reflet spéculaire */
 body.glass :is(.card,.hero,.list,.tl,.msg.a,.seg,.chipsRow>span,details.fold,.week .day,.rail,.tabbar,.sheet,.view.iaV .chatin,.iaBottom .sugg button,.btn:not(.p),.iconbtn,.toast,.stGrid button,.fSec,.fiBox,.qChoices button,.fChip,.capture form,.empty,.preview){
-  isolation:isolate;position:relative;
+  isolation:isolate;
   background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.05) 38%,rgba(255,255,255,.02) 62%,rgba(255,255,255,.08))!important;
   -webkit-backdrop-filter:blur(26px) saturate(220%) brightness(1.12);backdrop-filter:blur(26px) saturate(220%) brightness(1.12);
   box-shadow:inset 0 1.5px 1px -.5px rgba(255,255,255,.7),inset 0 -1px 1px rgba(255,255,255,.12),inset 0 0 22px rgba(255,255,255,.06),0 22px 44px -22px rgba(0,0,0,.85)}
@@ -709,6 +710,7 @@ body.glass :is(.card,.hero,.list,.tl,.msg.a,.seg,details.fold,.rail,.tabbar,.she
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
 body.glass :is(.card,.hero,.list,.tl,.msg.a,details.fold,.rail,.sheet,.stGrid button,.fSec)::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
   background:radial-gradient(130% 70% at 12% -18%,rgba(255,255,255,.24),transparent 52%),linear-gradient(180deg,rgba(255,255,255,.05),transparent 35%)}
+body.glass :is(.card,.hero,.list,.tl,.msg.a,.chipsRow>span,details.fold,.week .day,.rail,.view.iaV .chatin,.iaBottom .sugg button,.btn:not(.p),.iconbtn,.stGrid button,.fSec,.fiBox,.qChoices button,.fChip,.capture form,.empty,.preview){position:relative}
 body.glass .card .list,body.glass .examCard .list{background:none!important;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
 body.glass .card .list::before,body.glass .card .list::after{display:none}
 body.glass .card .item,body.glass .nList .nRow{background:none}
