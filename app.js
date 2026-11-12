@@ -118,12 +118,25 @@ function subjColor(name) { const d = subjDef(name); if (d) return d[1]; let h = 
 const decode = s => { const t = document.createElement('textarea'); t.innerHTML = String(s ?? ''); return t.value; };
 
 /* Devoirs Pronote affichés comme des tâches (ils vivent sur le serveur) */
+/* Pronote renvoie parfois le même devoir plusieurs fois (donné sur 2 cours, texte retouché, espaces…) :
+   on fusionne ceux qui ont la même matière, la même date et (presque) la même consigne. */
+const normTxt = t => decode(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+function uniqueDevoirs() {
+  const out = [];
+  for (const d of server.devoirs || []) {
+    const subj = (prettySubj(d.subject) || '').toLowerCase(), txt = normTxt(d.description);
+    const twin = out.find(o => o.due === d.due && o._s === subj && (o._t === txt || (txt.length > 12 && o._t.length > 12 && (o._t.startsWith(txt) || txt.startsWith(o._t)))));
+    if (twin) { twin.done = twin.done || d.done; twin._ids.push(d.id); if (txt.length > twin._t.length) { twin.description = d.description; twin._t = txt; } continue; }
+    out.push({ ...d, _s: subj, _t: txt, _ids: [d.id] });
+  }
+  return out;
+}
 function pronoteItems() {
   const done = new Set(settings.pronoteDone || []);
-  return (server.devoirs || []).map(d => {
+  return uniqueDevoirs().map(d => {
     const desc = decode(d.description || 'Devoir');
     return { id: 'pn:' + d.id, pronoteId: d.id, kind: 'devoir', source: 'pronote', subject: prettySubj(d.subject), due: d.due, time: null,
-      title: desc.split('\n')[0].slice(0, 160), note: desc, done: !!d.done || done.has(d.id), reminders: pronoteReminders(d.due) };
+      title: desc.split('\n')[0].slice(0, 160), note: desc, done: !!d.done || d._ids.some(i => done.has(i)), allIds: d._ids, reminders: pronoteReminders(d.due) };
   });
 }
 function pronoteReminders(due) {
@@ -135,7 +148,7 @@ function pronoteReminders(due) {
 /* Contrôles repérés dans les devoirs/tâches → 3 séances de révision (J-3, J-2, J-1 à 18h) */
 const EXAM_RE = /(?:^|[^\p{L}])(contr[ôo]le|ds|interro(?:gation)?|[ée]valuation|[ée]val|examen|bac blanc|partiel)(?![\p{L}])/iu;
 function examList() {
-  const P = (server.devoirs || []).filter(d => !d.done && EXAM_RE.test(decode(d.description || ''))).map(d => ({ id: 'p' + d.id, subject: prettySubj(d.subject), due: d.due, what: decode(d.description || '').split('\n')[0].slice(0, 200) }));
+  const P = uniqueDevoirs().filter(d => !d.done && EXAM_RE.test(decode(d.description || ''))).map(d => ({ id: 'p' + d.id, subject: prettySubj(d.subject), due: d.due, what: decode(d.description || '').split('\n')[0].slice(0, 200) }));
   const T = tasks.filter(t => !t.deleted && !t.done && t.due && t.kind !== 'revision' && EXAM_RE.test(t.title + ' ' + (t.note || ''))).map(t => ({ id: 'o' + t.id, subject: t.subject || t.title, due: t.due, what: t.title }));
   return [...P, ...T];
 }
@@ -245,7 +258,7 @@ let flushTimer = null;
 const queueFlush = () => { clearTimeout(flushTimer); flushTimer = setTimeout(flush, 600); };
 
 function saveTask(t) {
-  if (String(t.id).startsWith('pn:')) return setPronoteDone(t.pronoteId, t.done);
+  if (String(t.id).startsWith('pn:')) return setPronoteDone(t.allIds || t.pronoteId, t.done);
   if (String(t.id).startsWith('rv:')) { const s = new Set(settings.revDone || []); if (t.done) s.add(t.id); else s.delete(t.id); settings.revDone = [...s].slice(-200); saveSettings(); render(); return; }
   const i = tasks.findIndex(x => x.id === t.id); if (i < 0) tasks.push(t); else tasks[i] = t;
   outbox.put[t.id] = t; persist(); render(); queueFlush(); scheduleRappels();
@@ -256,7 +269,7 @@ function removeTask(id) {
 }
 function saveSettings() { outbox.settings = true; persist(); applyAccent(); queueFlush(); }
 function setPronoteDone(pid, done) {
-  const s = new Set(settings.pronoteDone || []); if (done) s.add(pid); else s.delete(pid);
+  const s = new Set(settings.pronoteDone || []); for (const id of [].concat(pid)) { if (done) s.add(id); else s.delete(id); }
   settings.pronoteDone = [...s]; saveSettings(); render(); scheduleRappels();
 }
 function completeTask(t, done = true) {
