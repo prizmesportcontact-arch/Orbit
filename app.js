@@ -913,6 +913,7 @@ Texte :
 
 /* ---------- Emploi du temps en grille (semaine, façon Pronote) ---------- */
 const SHORT_SUBJ = { 'Physique-chimie & maths': 'PC-Maths', 'Physique-chimie': 'PC', 'Histoire-géo': 'Hist-géo', 'Allemand': 'Allem.', 'Anglais': 'Anglais', 'Français': 'Français', 'Accompagnement perso': 'AP', 'Vie de classe': 'VDC', 'Innovation techno': 'IT', 'Techno en anglais': 'ETLV', 'Espagnol': 'Espa.' };
+const shortSubj = n => SHORT_SUBJ[n] || (/ingénier|ingenier|i2d/i.test(n) ? 'I2D' : n.length > 11 ? n.split(/[\s,'-]+/).filter(w => w.length > 2 && !/^(et|des|les|aux)$/i.test(w)).map(w => w[0].toUpperCase()).join('').slice(0, 4) : n);
 function weekGridHTML() {
   const mon = startOfDay(agendaDay); mon.setDate(mon.getDate() - (mon.getDay() + 6) % 7);
   let days = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
@@ -925,7 +926,7 @@ function weekGridHTML() {
   const block = (a, b, inner, cls, style, attr = '') => { const h = Math.max(20, top(b) - top(a) - 2); return `<div class="gBlk ${cls}${h < 44 ? ' short' : ''}" style="top:${top(a)}px;height:${h}px;${style}"${attr} title="${esc(inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())}">${inner}</div>`; };
   const cols = days.map(d => {
     const cs = coursOn(d).map(c => { const n = prettySubj(c.subject) || 'Cours', off = isOff(c), ct = contenuFor(c), col = subjColor(n);
-      return block(new Date(c.starts_at), new Date(c.ends_at), `<b><span class="gL">${esc(n)}</span><span class="gS">${esc(SHORT_SUBJ[n] || n)}</span></b>${c.room && !off ? `<small>${esc(c.room)}</small>` : ''}${off ? '<small>Annulé</small>' : ''}${ct ? `<i class="gC">${ICON.book}</i>` : ''}`, off ? 'off' : '', off ? '' : `--c:${col}`, ct ? ` data-ck="${ct.id}"` : ''); }).join('');
+      return block(new Date(c.starts_at), new Date(c.ends_at), `<b><span class="gL">${esc(n)}</span><span class="gS">${esc(shortSubj(n))}</span></b>${!off ? `<small><span class="gL">${fmtTime(c.starts_at)}${c.room ? ' · ' : ''}</span>${esc(c.room || '')}</small>` : ''}${off ? '<small>Annulé</small>' : ''}${ct ? `<i class="gC">${ICON.book}</i>` : ''}`, off ? 'off' : '', off ? '' : `--c:${col}`, ct ? ` data-ck="${ct.id}"` : ''); }).join('');
     const es = eventsOn(d).filter(e => !e.allDay).map(e => block(new Date(e.start), new Date(e.end), `<b>${esc(e.title)}</b>`, 'ev', '')).join('');
     const nowL = sameDay(d, now) && now.getHours() >= h0 && now.getHours() < h1 ? `<div class="gNow" style="top:${top(now)}px"></div>` : '';
     return `<div class="gCol ${sameDay(d, now) ? 'isToday' : ''}"><div class="gHead"><small>${d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')}</small><b>${d.getDate()}</b></div><div class="gBody" style="height:${(h1 - h0) * PX}px">${cs}${es}${nowL}</div></div>`;
