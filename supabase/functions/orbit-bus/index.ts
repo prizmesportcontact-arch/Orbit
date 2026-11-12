@@ -60,9 +60,23 @@ function simplify(j: any) {
   };
 }
 
+// Un lieu peut être : une clé connue (ponthevrard, starnoult, lycee), {coord:"lon;lat", name}, ou {q:"texte à chercher"}
+async function resolve(x: any): Promise<{ name: string; coord: string } | null> {
+  if (typeof x === "string" && PLACES[x]) return PLACES[x];
+  if (x && typeof x === "object" && /^-?\d+(\.\d+)?;-?\d+(\.\d+)?$/.test(String(x.coord ?? ""))) return { name: String(x.name || "Ta position"), coord: String(x.coord) };
+  const q = typeof x === "string" ? x : x?.q;
+  if (!q || String(q).length < 2) return null;
+  const p = new URLSearchParams({ q: String(q).slice(0, 120), count: "3" });
+  for (const t of ["stop_area", "address", "poi", "administrative_region"]) p.append("type[]", t);
+  const j = await prim("/v2/navitia/places?" + p.toString());
+  const pl = (j?.places ?? [])[0];
+  if (!pl) return null;
+  return { name: pl.name ?? String(q), coord: pl.id };
+}
+
 async function journeys(b: any) {
-  const from = PLACES[b.from], to = PLACES[b.to];
-  if (!from || !to) return { ok: false, error: "Lieu inconnu" };
+  const [from, to] = await Promise.all([resolve(b.from), resolve(b.to)]);
+  if (!from || !to) return { ok: false, error: `Lieu introuvable : ${!from ? (b.from?.q ?? b.from) : (b.to?.q ?? b.to)}` };
   const dt = String(b.datetime ?? "").replace(/[^0-9T]/g, "").slice(0, 15);
   const q = new URLSearchParams({ from: from.coord, to: to.coord, count: String(Math.min(5, b.count ?? 3)), datetime_represents: b.represents === "arrival" ? "arrival" : "departure", data_freshness: "realtime", max_walking_duration_to_pt: "1500", min_nb_journeys: "2" });
   if (dt) q.set("datetime", dt);

@@ -330,11 +330,12 @@ Le message peut être :
 - une QUESTION DE COURS, une demande d'explication, d'aide sur un exercice ou de révision (ex : « explique-moi le discriminant », « c'est quoi le prétérit », « aide-moi sur l'exo 3 », « comment on calcule une moyenne pondérée ») → intent "cours" (laisse "reply" vide, un prof spécialisé répondra) ;
 - une demande de FICHE de révision (ex : « fais-moi une fiche sur la forme canonique ») → intent "fiche" avec "study":{"subject":"matière ou null","topic":"sujet"} ;
 - une demande d'être INTERROGÉ ou de QUIZ (ex : « interroge-moi sur l'allemand », « quiz sur la Boétie ») → intent "quiz" avec "study":{"subject":"matière ou null","topic":"sujet ou null"} ;
+- une question de TRAJET, BUS ou TRANSPORT (ex : « je veux rentrer à 17h », « comment aller à la gare de Rambouillet samedi à 14h », « quel bus pour être au lycée avant 9h demain », « je suis chez un pote à Clairefontaine, comment je rentre ? ») → intent "trajet" avec "trip":{"from":"…","to":"…","datetime":"YYYY-MM-DDTHH:MM" ou null (null = maintenant),"represents":"departure" ou "arrival"}. Pour from/to, mets "maison" (là où il dort ce jour-là, l'app le sait), "lycee", "ici" (sa position GPS : seulement s'il dit « d'ici », « où je suis », « ma position », ou s'il ne dit pas d'où il part alors qu'il n'est visiblement pas chez lui), ou un lieu précis en texte avec la ville (ex : "Gare de Rambouillet", "Mairie, Clairefontaine-en-Yvelines", "Paris Montparnasse"). « rentrer » = vers "maison". « arriver avant/pour 9h » = represents "arrival". Sans heure ni lieu de départ précisés pour « rentrer » après les cours, part du "lycee" à la fin de ses cours. Laisse "reply" vide ;
 - une demande de MODIFIER, DÉCALER ou SUPPRIMER (ex : « décale tout à demain », « mets le dentiste à 17h », « supprime le rappel poubelles », « renomme X ») → intent "edit" : "edits" liste les changements [{"id":"…","due":"YYYY-MM-DD","time":"HH:MM"|null,"title":"…"}] (ne mets que les champs qui changent ; "time":null enlève l'heure) et "remove" les id à supprimer. « tout » = toutes les tâches concernées de la liste ci-dessous. Les devoirs Pronote (id qui commence par pn:) et les révisions (rv:) ne peuvent être ni décalés ni supprimés : dis-le dans "reply" et propose de les marquer faits.
 Pour "chat", "reply" est une VRAIE réponse complète et utile, pas une phrase d'introduction : par exemple pour « organise ma semaine », donne le plan jour par jour (lundi, mardi…) en t'appuyant sur ses cours, devoirs, tâches et agenda ci-dessous, avec des créneaux concrets (ex : « 17h30-18h15 : exo de maths ») et les priorités. Mets en forme pour un téléphone : phrases courtes, un petit titre par jour ou par partie (ex : « Lundi : » seul sur sa ligne), des tirets « - » pour les listes, **gras** pour l'essentiel (matière, priorité), horaires au format 17h30-18h15. Pas de tableau, pas de #. Pour "add", "done" et "edit", "reply" est une phrase courte qui dit ce que tu as fait.
 Style de "reply" : commence directement par l'info ou le plan, sans phrase d'intro (« Voici… », « Bien sûr ! », « Super question »). Pas de formule de fin (« N'hésite pas… », « Bon courage ! », « En résumé »), pas d'emoji, pas de tournure « ce n'est pas X, c'est Y », pas de listes de trois adjectifs. Donne des faits vérifiables : heure, matière, durée estimée, date. Une question de relance au maximum, seulement si elle est utile.
 Dates : une date sans année = la PROCHAINE occurrence. « avant le X » = date limite X. Répétition : daily, weekdays, weekly, biweekly, monthly ou null.
-Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done"|"edit"|"cours"|"fiche"|"quiz","reply":"ta réponse","study":null,"tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"],"edits":[],"remove":[]}`;
+Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done"|"edit"|"cours"|"fiche"|"quiz"|"trajet","reply":"ta réponse","study":null,"trip":null,"tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"],"edits":[],"remove":[]}`;
 function taskFrom(x, source) {
   const t = { id: uid(), title: cap(String(x.title || '').trim()) || 'Sans titre', due: x.due || null, time: x.time || null, kind: ['tache', 'devoir', 'rdv'].includes(x.kind) ? x.kind : 'tache', subject: x.subject || null, repeat: REPEATS[x.repeat] ? x.repeat || null : null, note: x.note || null, done: false, createdAt: new Date().toISOString(), source };
   if (t.repeat && !t.due) t.due = ymd(new Date());
@@ -342,8 +343,8 @@ function taskFrom(x, source) {
   return t;
 }
 async function agent(text, history = []) {
-  const r = await aiJSON({ system: AGENT_RULES + '\n\n' + snapshotCtx(), messages: [...history.slice(-10), { role: 'user', content: text }] });
-  return { intent: r.intent || (r.tasks?.length ? 'add' : 'chat'), reply: String(r.reply || ''), tasks: Array.isArray(r.tasks) ? r.tasks.filter(x => x && x.title) : [], done: Array.isArray(r.done) ? r.done : [], edits: Array.isArray(r.edits) ? r.edits.filter(x => x && x.id) : [], remove: Array.isArray(r.remove) ? r.remove.map(String) : [], study: r.study && typeof r.study === 'object' ? r.study : {} };
+  const r = await aiJSON({ system: AGENT_RULES + '\n\n' + snapshotCtx() + busCtx(), messages: [...history.slice(-10), { role: 'user', content: text }] });
+  return { intent: r.intent || (r.tasks?.length ? 'add' : 'chat'), reply: String(r.reply || ''), tasks: Array.isArray(r.tasks) ? r.tasks.filter(x => x && x.title) : [], done: Array.isArray(r.done) ? r.done : [], edits: Array.isArray(r.edits) ? r.edits.filter(x => x && x.id) : [], remove: Array.isArray(r.remove) ? r.remove.map(String) : [], study: r.study && typeof r.study === 'object' ? r.study : {}, trip: r.trip && typeof r.trip === 'object' ? r.trip : null };
 }
 // Applique les modifications demandées à l'IA ; renvoie un résumé lisible.
 function applyEdits(a) {
@@ -403,7 +404,7 @@ $('#capForm').addEventListener('submit', async e => {
     if (server.flags?.ai) {
       let a = null;
       try { a = await withTimeout(agent(text, chat), 50000); } catch (err) { a = null; }
-      if (a && ['cours', 'fiche', 'quiz'].includes(a.intent)) { $('#capIn').value = ''; toggleCapture(false); go('ia'); ask(text, a); return; }
+      if (a && ['cours', 'fiche', 'quiz', 'trajet'].includes(a.intent)) { $('#capIn').value = ''; toggleCapture(false); go('ia'); ask(text, a); return; }
       if (a && a.intent === 'chat') { $('#capIn').value = ''; toggleCapture(false); chat.push({ role: 'user', content: text }, { role: 'assistant', content: a.reply || "Je n'ai pas compris, reformule ?", q: text }); saveChat(); if ($('#chatList')) paintChat(); go('ia'); return; }
       if (a && a.intent === 'done' && a.done.length) { $('#capIn').value = ''; toggleCapture(false); for (const id of a.done) { const t = allItems().find(x => x.id === id); if (t) completeTask(t, true); } return; }
       if (a && a.intent === 'edit' && (a.edits.length || a.remove.length)) { $('#capIn').value = ''; toggleCapture(false); const n = applyEdits(a); toast('C\'est fait', (a.reply || n.join(' ')).replace(/\*\*/g, '').slice(0, 120)); return; }
@@ -724,6 +725,51 @@ async function busHome() {
       <small>${f ? `Arrêt ${esc(f.from)}, bus à ${fmtTime(f.dep)}. ` : ''}Arrivée ${fmtTime(j.arr)}${morning && new Date(j.arr) > day.first ? `, après le début du cours (${fmtTime(day.first)})` : ''}.</small></button>`;
     $('#busCardBtn').onclick = () => go('bus');
   } catch { box.innerHTML = ''; }
+}
+
+
+/* ---------- Trajets demandés à l'assistant ---------- */
+function busCtx() {
+  if (!settings.bus) return '\nTRANSPORT : lieu de la semaine pas encore choisi (onglet Bus).';
+  const n = new Date(), h = homeFor(n, 'now'), d = busDay(n);
+  return `\nTRANSPORT : il habite en alternance à Ponthévrard (3 Grande Rue) et à Saint-Arnoult-en-Yvelines (5 rue du Louvre), changement le vendredi soir. En ce moment il est à ${HOMES[h]}. Lycée Louis Bascan à Rambouillet.${d ? ` Prochain jour de cours : ${fmtDay(d.d)}, de ${fmtTime(d.first)} à ${fmtTime(d.last)}.` : ''}`;
+}
+const myPosition = () => new Promise((ok, ko) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => ok(p.coords), ko, { enableHighAccuracy: true, timeout: 12000, maximumAge: 120000 }) : ko(new Error('geo')));
+async function tripPlace(x, when) {
+  const s = String(x || '').trim(), l = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (!s || /^(maison|chez moi|domicile|home)$/.test(l)) { const h = homeFor(when, 'now'); if (!h) throw new Error("Dis-moi d'abord dans l'onglet **Bus** où tu es cette semaine."); return h; }
+  if (/^(lycee|le lycee|lycee louis bascan|louis bascan)$/.test(l)) return 'lycee';
+  if (/^ponthevrard$/.test(l)) return 'ponthevrard';
+  if (/^(saint|st)[- ]arnoult/.test(l) && !/,/.test(s)) return 'starnoult';
+  if (/^(ici|ma position|position|la ou je suis)$/.test(l)) {
+    try { const c = await myPosition(); return { coord: `${c.longitude.toFixed(6)};${c.latitude.toFixed(6)}`, name: 'ta position' }; }
+    catch { throw new Error("Je n'ai pas accès à ta position. Autorise la localisation pour Orbit, ou dis-moi d'où tu pars (ex : « depuis la gare de Rambouillet »)."); }
+  }
+  return { q: s };
+}
+const placeLbl = x => typeof x === 'string' ? (x === 'lycee' ? 'le lycée' : HOMES[x]) : x.name || x.q;
+async function tripAnswer(t) {
+  let when = t.datetime ? new Date(t.datetime) : new Date();
+  if (isNaN(when)) when = new Date();
+  try {
+    const [from, to] = await Promise.all([tripPlace(t.from || 'ici', when), tripPlace(t.to || 'maison', when)]);
+    const arrival = t.represents === 'arrival';
+    const r = await busCall('journeys', { from, to, datetime: navDT(when), represents: arrival ? 'arrival' : 'departure', count: 4 }, 60e3);
+    if (!r.journeys.length) return `Aucun trajet en transports trouvé de **${r.from}** à **${r.to}** ${arrival ? 'pour arriver avant' : 'à partir de'} ${fmtTime(when)}${sameDay(when, new Date()) ? '' : ' ' + fmtDay(when)}.`;
+    const J = r.journeys, best = arrival ? (J.filter(j => new Date(j.arr) <= when).pop() || J[0]) : J.find(j => new Date(j.dep) >= new Date(when.getTime() - 6e4)) || J[0];
+    const day = sameDay(best.dep, new Date()) ? '' : ` (${fmtDay(new Date(best.dep))})`;
+    const steps = best.sections.map(x => {
+      if (x.type === 'pt') return `- ${fmtTime(x.dep)} : ${x.line?.mode ? x.line.mode.toLowerCase() : 'bus'} **${x.line?.code || ''}**${x.line?.direction ? ` direction ${x.line.direction}` : ''}, depuis **${x.from}**. Descends à **${x.to}** à ${fmtTime(x.arr)}`;
+      if (x.type === 'walk' && x.duration >= 60) return `- ${fmtTime(x.dep)} : marche ${Math.round(x.duration / 60)} min jusqu'à ${x.to}`;
+      if (x.type === 'waiting' && x.duration >= 120) return `- attente ${Math.round(x.duration / 60)} min`;
+      return '';
+    }).filter(Boolean).join('\n');
+    const m = minsTo(best.dep), soon = m >= 0 && m < 120 ? ` (${inMin(m)})` : '';
+    const others = J.filter(j => j !== best).slice(0, 3).map(j => `${fmtTime(j.dep)} → ${fmtTime(j.arr)}`).join(', ');
+    const late = arrival && new Date(best.arr) > when ? `\n\n> Aucun trajet n'arrive avant ${fmtTime(when)} : c'est le premier possible.` : '';
+    const dis = (r.disruptions || []).filter(d => d.text).slice(0, 1).map(d => `\n\n> Perturbation : ${d.text.slice(0, 220)}`).join('');
+    return `#### Départ ${fmtTime(best.dep)}${soon}, arrivée ${fmtTime(best.arr)}${day}\nDe **${r.from}** à **${r.to}**, ${best.transfers ? best.transfers + ' correspondance' + (best.transfers > 1 ? 's' : '') : 'direct'}.\n${steps}${late}${others ? `\n\nAutres options : ${others}.` : ''}${dis}`;
+  } catch (e) { return e.message && !/fetch|network/i.test(e.message) ? e.message : 'Impossible de calculer le trajet pour le moment, réessaie.'; }
 }
 
 /* ---------- « Maintenant » : où j'en suis dans ma journée ---------- */
@@ -1178,7 +1224,7 @@ function paintChat(stick = true) {
   const inp = $('#chatIn'), btn = $('#chatF button:last-child'); if (inp) { inp.disabled = asking; btn.disabled = asking; }
   if (stick || atBottom) requestAnimationFrame(() => { const last = L.querySelector('.msgRow:last-child, .msg.u:last-child'); if (last && last.offsetHeight > L.clientHeight * .7 && !asking && chat.at(-1)?.role === 'assistant') L.scrollTop = last.offsetTop - 10; else L.scrollTop = L.scrollHeight; });
 }
-const IA_SUGG2 = [['Ce soir', "Qu'est-ce que je dois faire ce soir ?"], ['Ma semaine', 'Organise ma semaine'], ['Fiche', '#fiche'], ['Quiz', '#quiz'], ['Photo', '#photo'], ['Mes fiches', '#list'], ['En retard', "Qu'est-ce qui est en retard ?"]];
+const IA_SUGG2 = [['Ce soir', "Qu'est-ce que je dois faire ce soir ?"], ['Rentrer', 'Comment je rentre après les cours ?'], ['Ma semaine', 'Organise ma semaine'], ['Fiche', '#fiche'], ['Quiz', '#quiz'], ['Photo', '#photo'], ['Mes fiches', '#list'], ['En retard', "Qu'est-ce qui est en retard ?"]];
 function iaAction(k) {
   const inp = $('#chatIn');
   if (k === 'fiche') ficheSheet(); else if (k === 'quiz') quizSheet(); else if (k === 'photo') $('#stFile').click(); else if (k === 'list') fichesSheet();
@@ -1447,6 +1493,7 @@ async function ask(q, pre = null) {
       setTimeout(() => a.intent === 'fiche' ? makeFiche({ subject, topic }) : runQuiz({ subject, topic }), 50);
       return;
     }
+    if (a.intent === 'trajet') { chat.push({ role: 'assistant', content: await tripAnswer(a.trip || {}), q }); return; }
     const notes = [];
     if (a.intent === 'add' && a.tasks.length) { const L = a.tasks.map(x => taskFrom(x, 'ia')); L.forEach(saveTask); notes.push(`✓ **Ajouté :**\n${L.map(t => '- ' + t.title + (t.due ? ' (' + dueLabel(t).toLowerCase() + ')' : '')).join('\n')}`); }
     if (a.edits.length || a.remove.length) notes.push(...applyEdits(a));
