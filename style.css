@@ -333,8 +333,11 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none;color:var(--tx
 .gBlk small{font-size:10px;font-weight:600;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gBlk.off{background:var(--hatch),var(--s1);color:var(--off);box-shadow:inset 0 0 0 1px rgba(255,107,107,.4)}
 .gBlk.off b{text-decoration:line-through;color:var(--mut)}
-.gBlk.ev{background:var(--s2);color:var(--txt);box-shadow:inset 3px 0 0 var(--blue)}
+.gBlk.ev{background:linear-gradient(90deg,var(--blue) 0 3px,var(--s2) 3px);color:var(--txt);padding-left:9px}
 .gBlk[data-ck]{cursor:pointer}
+.gBlk.short{padding:0 6px;justify-content:center}
+.gBlk.short b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}
+.gBlk.short small{display:none}
 .gC{position:absolute;right:4px;bottom:3px;width:13px;height:13px;opacity:.7}.gC svg{width:13px;height:13px}
 .gNow{position:absolute;left:-2px;right:-2px;height:2px;background:var(--acc);z-index:2}
 .gNow:before{content:"";position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--acc)}

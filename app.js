@@ -922,7 +922,7 @@ function weekGridHTML() {
   const hrs = [...C.map(c => [new Date(c.starts_at), new Date(c.ends_at)]), ...E.map(e => [new Date(e.start), new Date(e.end)])];
   const h0 = Math.min(8, ...hrs.map(([a]) => a.getHours())), h1 = Math.max(17, ...hrs.map(([, b]) => b.getHours() + (b.getMinutes() ? 1 : 0)));
   const PX = 54, top = d => ((d.getHours() - h0) * 60 + d.getMinutes()) / 60 * PX, now = new Date();
-  const block = (a, b, inner, cls, style, attr = '') => `<div class="gBlk ${cls}" style="top:${top(a)}px;height:${Math.max(18, top(b) - top(a) - 2)}px;${style}"${attr}>${inner}</div>`;
+  const block = (a, b, inner, cls, style, attr = '') => { const h = Math.max(20, top(b) - top(a) - 2); return `<div class="gBlk ${cls}${h < 44 ? ' short' : ''}" style="top:${top(a)}px;height:${h}px;${style}"${attr} title="${esc(inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())}">${inner}</div>`; };
   const cols = days.map(d => {
     const cs = coursOn(d).map(c => { const n = prettySubj(c.subject) || 'Cours', off = isOff(c), ct = contenuFor(c), col = subjColor(n);
       return block(new Date(c.starts_at), new Date(c.ends_at), `<b><span class="gL">${esc(n)}</span><span class="gS">${esc(SHORT_SUBJ[n] || n)}</span></b>${c.room && !off ? `<small>${esc(c.room)}</small>` : ''}${off ? '<small>Annulé</small>' : ''}${ct ? `<i class="gC">${ICON.book}</i>` : ''}`, off ? 'off' : '', off ? '' : `--c:${col}`, ct ? ` data-ck="${ct.id}"` : ''); }).join('');
