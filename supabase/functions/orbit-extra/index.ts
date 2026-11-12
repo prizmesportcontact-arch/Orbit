@@ -23,6 +23,10 @@ Deno.serve(async (req) => {
       const { data } = await db.from("orbit_kv").select("value, updated_at").eq("key", cfg.id === 1 ? "notes" : `u${cfg.id}:notes`).maybeSingle();
       return json({ ok: true, notes: data?.value ?? null, at: data?.updated_at ?? null });
     }
+    if (b.action === "contenus") {
+      const { data } = await db.from("orbit_kv").select("value, updated_at").eq("key", cfg.id === 1 ? "contenus" : `u${cfg.id}:contenus`).maybeSingle();
+      return json({ ok: true, contenus: data?.value ?? [], at: data?.updated_at ?? null });
+    }
     if (b.action === "transcribe") return json(await transcribe(cfg, b));
     return json({ error: "action inconnue" }, 400);
   } catch (e) {

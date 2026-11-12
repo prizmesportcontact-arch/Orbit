@@ -16,6 +16,8 @@ const store = {
 
 const SVG = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 const ICON = {
+  book: SVG('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/>'),
+  file: SVG('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>'),
   play: SVG('<path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/>'),
   undo: SVG('<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   aujourdhui: SVG('<path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
@@ -44,7 +46,8 @@ const skel = (n = 3, h = 64) => `<div class="skel">${Array.from({ length: n }, (
 let notesLoading = false;
 let lastSince = store.get('orbit.since', null);
 let outbox = store.get('orbit.outbox', { put: {}, del: [], settings: false });
-let current = 'aujourdhui', taskFilter = 'actives', agendaDay = startOfDay(new Date()), chat = [];
+let agendaMode = store.get('orbit.agendaMode', 'jour');
+let current = 'aujourdhui', taskFilter = 'semaine', agendaDay = startOfDay(new Date()), chat = [];
 let online = true;
 
 /* ---------- Dates ---------- */
@@ -516,8 +519,9 @@ const teacherName = t => t ? String(t).split(',')[0].trim().replace(/^(\S+)\s+(\
 function coursHTML(c) {
   const s = prettySubj(c.subject) || 'Cours';
   const why = c.status && !/^annul/i.test(c.status) ? c.status : '';
-  if (isOff(c)) return `<div class="item cours canceled">${subjBadge(s, 'sq', true)}<div class="bd"><div class="cancelTop"><span class="tag cancel">ANNULÉ</span>${why ? `<b>${esc(why)}</b>` : ''}</div><div class="tt">${esc(s)}</div><div class="mm"><span>${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}</div></div></div>`;
-  return `<div class="item cours">${subjBadge(s)}<div class="bd"><div class="tt">${esc(s)}</div><div class="mm"><span class="tag cours">${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.room ? `<span>${esc(c.room)}</span>` : ''}${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}${c.status ? `<span class="tag soon">${esc(c.status)}</span>` : ''}</div></div></div>`;
+  const ct = contenuFor(c), ck = ct ? ` data-ck="${ct.id}"` : '';
+  if (isOff(c)) return `<div class="item cours canceled"${ck}>${subjBadge(s, 'sq', true)}<div class="bd"><div class="cancelTop"><span class="tag cancel">ANNULÉ</span>${why ? `<b>${esc(why)}</b>` : ''}</div><div class="tt">${esc(s)}</div><div class="mm"><span>${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}</div></div></div>`;
+  return `<div class="item cours${ct ? ' hasC' : ''}"${ck}>${subjBadge(s)}<div class="bd"><div class="tt">${esc(s)}${ct ? `<span class="cBadge">${ICON.book}Cours</span>` : ''}</div><div class="mm"><span class="tag cours">${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.room ? `<span>${esc(c.room)}</span>` : ''}${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}${c.status ? `<span class="tag soon">${esc(c.status)}</span>` : ''}</div></div></div>`;
 }
 function evHTML(e) {
   return `<div class="item"><div class="bar gbar"></div><div class="bd"><div class="tt">${esc(e.title)}</div><div class="mm"><span class="tag">${e.allDay ? 'Journée' : fmtTime(e.start) + (e.end ? ' – ' + fmtTime(e.end) : '')}</span>${e.location ? `<span>${esc(e.location)}</span>` : ''}<span class="tag ok">Google</span></div></div></div>`;
@@ -642,22 +646,25 @@ function rToday() {
 
 function rTasks() {
   const v = $('#v-taches');
-  let html = `<div class="seg" id="tseg"><div class="pill"></div>${[['actives', 'À faire'], ['faites', 'Terminées'], ['toutes', 'Toutes']].map(([k, l]) => `<button data-f="${k}" class="${taskFilter === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-  const perso = tasks.filter(t => !t.deleted);
-  if (taskFilter === 'faites') {
-    const d = perso.filter(t => t.done).sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
-    html += `<div class="dayHead"><b>Terminées</b><span class="n">${d.length}</span></div>${d.length ? '<button class="btn sm" id="clearDone" style="margin:0 0 10px 4px">Tout effacer</button>' : ''}<div class="list">${d.map(t => itemHTML(t)).join('') || '<div class="empty">Rien de terminé pour l\'instant</div>'}</div>`;
+  const perso = tasks.filter(t => !t.deleted), open = perso.filter(t => !t.done).sort(byDue);
+  const isWeek = t => { const n = daysLeft(t); return n !== null && n <= 6; };
+  const week = open.filter(isWeek), later = open.filter(t => !isWeek(t)), done = perso.filter(t => t.done).sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
+  if (!['semaine', 'plus', 'faites'].includes(taskFilter)) taskFilter = 'semaine';
+  const cnt = n => n ? ` <i class="segN">${n}</i>` : '';
+  let html = `<div class="seg" id="tseg"><div class="pill"></div>${[['semaine', 'Cette semaine', week.length], ['plus', 'Plus tard', later.length], ['faites', 'Faites', 0]].map(([k, l, n]) => `<button data-f="${k}" class="${taskFilter === k ? 'on' : ''}">${l}${cnt(n)}</button>`).join('')}</div>`;
+  const group = (L, keyOf, titleOf) => {
+    const groups = new Map(); for (const t of L) { const k = keyOf(t); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
+    return [...groups.entries()].map(([k, g]) => { const [b, sub, cls] = titleOf(k); return `<div class="dayHead ${cls || ''}"><b>${b}</b><span>${sub || ''}</span><span class="n">${g.length}</span></div><div class="list">${g.map(t => itemHTML(t, { noDue: /^\d{4}/.test(k) && !t.time })).join('')}</div>`; }).join('');
+  };
+  if (taskFilter === 'semaine') {
+    html += week.length ? group(week, t => daysLeft(t) < 0 ? 'late' : t.due, k => k === 'late' ? ['En retard', 'à rattraper', 'late'] : dayTitle(new Date(k + 'T12:00')))
+      : `<div class="empty" style="margin-top:18px">Rien cette semaine.${later.length ? ` ${later.length} tâche${later.length > 1 ? 's' : ''} plus tard.` : ''} Ajoute-en une avec le +, ex : « payer la cantine avant vendredi ».</div>`;
+  } else if (taskFilter === 'plus') {
+    const monday = d => { const x = startOfDay(d); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x; };
+    html += later.length ? group(later, t => t.due ? 'w' + ymd(monday(dueDate(t))) : 'none', k => k === 'none' ? ['Sans date', 'quand tu veux'] : (() => { const m = new Date(k.slice(1) + 'T12:00'), n = Math.round((m - monday(new Date())) / 864e5 / 7); return [n === 1 ? 'Semaine prochaine' : `Dans ${n} semaines`, 'semaine du ' + m.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })]; })())
+      : `<div class="empty" style="margin-top:18px">Rien de prévu plus tard.</div>`;
   } else {
-    const L = (taskFilter === 'toutes' ? perso : perso.filter(t => !t.done)).slice().sort(byDue);
-    const groups = new Map();
-    for (const t of L) { const n = daysLeft(t); const k = n === null ? 'none' : n < 0 ? 'late' : n > 13 ? 'later' : t.due; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
-    const order = ['late', ...[...groups.keys()].filter(k => !['late', 'later', 'none'].includes(k)).sort(), 'later', 'none'];
-    for (const k of order) {
-      const g = groups.get(k); if (!g) continue;
-      const [b, s] = k === 'late' ? ['En retard', ''] : k === 'later' ? ['Plus tard', ''] : k === 'none' ? ['Sans date', ''] : dayTitle(new Date(k + 'T12:00'));
-      html += `<div class="dayHead ${k === 'late' ? 'late' : ''}"><b>${b}</b><span>${s}</span><span class="n">${g.length}</span></div><div class="list">${g.map(t => itemHTML(t, { noDue: !['late', 'later', 'none'].includes(k) && !t.time })).join('')}</div>`;
-    }
-    if (!L.length) html += `<div class="empty" style="margin-top:18px">Aucune tâche. Écris-en une avec le +, ex : « payer la cantine avant vendredi » ou « sortir les poubelles chaque lundi ».</div>`;
+    html += `<div class="dayHead"><b>Faites</b><span>les plus récentes d'abord</span><span class="n">${done.length}</span></div>${done.length ? '<button class="btn sm" id="clearDone" style="margin:0 0 10px 4px">Tout effacer</button>' : ''}<div class="list">${done.slice(0, 60).map(t => itemHTML(t)).join('') || '<div class="empty">Rien de terminé pour l\'instant</div>'}</div>`;
   }
   v.innerHTML = html; bindList(v); segPill('#tseg');
   v.querySelectorAll('#tseg button').forEach(b => b.onclick = () => { taskFilter = b.dataset.f; rTasks(); });
@@ -666,7 +673,7 @@ function rTasks() {
 function segPill(sel) { requestAnimationFrame(() => { const s = $(sel); if (!s) return; const on = s.querySelector('button.on'), p = s.querySelector('.pill'); if (on) { p.style.width = on.offsetWidth + 'px'; p.style.transform = `translateX(${on.offsetLeft}px)`; p.style.left = '0'; } }); }
 
 /* ---------- Notes Pronote ---------- */
-let notes = store.get('orbit.notes', null), hwTab = 'devoirs';
+let notes = store.get('orbit.notes', null), hwTab = 'devoirs', hwSubj = null;
 async function loadNotes() {
   notesLoading = true;
   try { const r = await extra('notes'); if (r.notes) { notes = r.notes; store.set('orbit.notes', notes); } } catch { /* hors ligne */ } finally { notesLoading = false; if (current === 'devoirs' && hwTab === 'notes') rHomework(); }
@@ -695,6 +702,32 @@ function notesCtx() {
   const S = (notes.subjects || []).filter(x => num(x.avg) != null).map(x => `${subjParts(x.name).main}${subjParts(x.name).sub ? ' (' + subjParts(x.name).sub + ')' : ''} ${fmtN(x.avg)}/${x.outOf} (classe ${fmtN(x.classAvg)})`).join(' ; ');
   const G = (notes.grades || []).slice(0, 8).map(g => `${subjParts(g.subject).main} ${fmtN(g.value)}/${fmtN(g.outOf)} le ${g.date}${g.comment ? ' « ' + g.comment + ' »' : ''}`).join(' ; ');
   return `\n\nNOTES PRONOTE (${notes.period}) : moyenne générale ${fmtN(notes.overall)} (classe ${fmtN(notes.classOverall)}). Par matière : ${S}. Dernières notes : ${G}.`;
+}
+
+/* ---------- Contenu des cours (cahier de textes Pronote) ---------- */
+let contenus = store.get('orbit.contenus', []);
+async function loadContenus() {
+  try { const r = await extra('contenus'); if (Array.isArray(r.contenus)) { contenus = r.contenus; store.set('orbit.contenus', contenus); if (current === 'devoirs' && hwTab === 'cours') rHomework(); } } catch { }
+}
+function contenuFor(c) {
+  if (!contenus.length) return null; const t = new Date(c.starts_at).getTime(), sub = (c.subject || '').toUpperCase();
+  return contenus.find(x => Math.abs(new Date(x.start).getTime() - t) < 6e5 && (x.subject || '').toUpperCase() === sub) || null;
+}
+function contenuHTML(x, full = true) {
+  const s = prettySubj(x.subject) || 'Cours', d = new Date(x.start);
+  return `<div class="card cCard"><div class="exTop">${subjBadge(s)}<div class="nTx"><b>${esc(s)}</b><small>${esc(cap(d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' })))} · ${fmtTime(x.start)}${x.teachers ? ' · ' + esc(x.teachers.split(',')[0]) : ''}</small></div></div>
+    ${x.items.map(i => `<div class="cItem">${i.cat || i.title ? `<div class="cHead">${i.cat ? `<span class="tag">${esc(i.cat)}</span>` : ''}${i.title ? `<b>${esc(i.title)}</b>` : ''}</div>` : ''}${i.text ? `<div class="cTxt${full ? '' : ' clamp'}">${esc(i.text).replace(/\n/g, '<br>')}</div>` : ''}${i.files?.length ? `<div class="cFiles">${i.files.map(f => `<a href="${esc(f.url)}" target="_blank" rel="noopener">${ICON.file}${esc(f.name)}</a>`).join('')}</div>` : ''}</div>`).join('')}</div>`;
+}
+function openContenu(id) {
+  const x = contenus.find(c => c.id === id); if (!x) return;
+  const s = $('#sheet'); s.innerHTML = `<div class="grab"></div>${contenuHTML(x)}<div class="acts"><button class="btn p ic" id="cAsk">${ICON.ia}Réviser ce cours</button><button class="btn" id="cClose">Fermer</button></div>`;
+  openSheet(); $('#cClose').onclick = closeSheet;
+  $('#cAsk').onclick = () => { closeSheet(); go('ia'); ask(`Aide-moi à réviser ce cours de ${prettySubj(x.subject)} du ${new Date(x.start).toLocaleDateString('fr-FR')} : ${x.items.map(i => [i.title, i.text].filter(Boolean).join(' — ')).join(' / ')}. Explique l'essentiel simplement puis pose-moi 3 questions.`); };
+}
+document.addEventListener('click', e => { const it = e.target.closest('.item.cours[data-ck], .gBlk[data-ck]'); if (it && !e.target.closest('[data-act]')) openContenu(it.dataset.ck); });
+function contenusCtx() {
+  if (!contenus.length) return '';
+  return '\n\nCONTENU DES DERNIERS COURS (cahier de textes) : ' + contenus.slice(0, 12).map(x => `${prettySubj(x.subject)} le ${x.start.slice(0, 10)} : ${x.items.map(i => [i.title, i.text].filter(Boolean).join(' — ')).join(' / ').replace(/\s+/g, ' ').slice(0, 220)}`).join(' ; ');
 }
 
 /* ---------- Mode focus (Pomodoro) ---------- */
@@ -787,8 +820,16 @@ function rHomework() {
     const [b, s] = k === 'late' ? ['En retard', ''] : k === 'none' ? ['Sans date', ''] : dayTitle(new Date(k + 'T12:00'));
     list += `<div class="dayHead ${k === 'late' ? 'late' : ''}"><b>${b}</b><span>${s}</span><span class="n">${g.length}</span></div><div class="list">${g.map(t => itemHTML(t, { noDue: k !== 'late' })).join('')}</div>`;
   }
-  const seg = `<div class="seg hwSeg" id="hwSeg"><div class="pill"></div><button data-h="devoirs" class="${hwTab === 'devoirs' ? 'on' : ''}">Devoirs</button><button data-h="notes" class="${hwTab === 'notes' ? 'on' : ''}">Notes${notes && num(notes.overall) != null ? ' · ' + fmtN(notes.overall) : ''}</button></div>`;
-  const bindSeg = () => { v.querySelectorAll('#hwSeg button').forEach(b => b.onclick = () => { hwTab = b.dataset.h; rHomework(); if (hwTab === 'notes') loadNotes(); }); segPill('#hwSeg'); };
+  const seg = `<div class="seg hwSeg" id="hwSeg"><div class="pill"></div><button data-h="devoirs" class="${hwTab === 'devoirs' ? 'on' : ''}">Devoirs</button><button data-h="notes" class="${hwTab === 'notes' ? 'on' : ''}">Notes${notes && num(notes.overall) != null ? ' · ' + fmtN(notes.overall) : ''}</button><button data-h="cours" class="${hwTab === 'cours' ? 'on' : ''}">Cours</button></div>`;
+  const bindSeg = () => { v.querySelectorAll('#hwSeg button').forEach(b => b.onclick = () => { hwTab = b.dataset.h; rHomework(); if (hwTab === 'notes') loadNotes(); if (hwTab === 'cours') loadContenus(); }); segPill('#hwSeg'); };
+  if (hwTab === 'cours') {
+    const subs = [...new Set(contenus.map(x => prettySubj(x.subject)))];
+    const L = contenus.filter(x => !hwSubj || prettySubj(x.subject) === hwSubj);
+    v.innerHTML = seg + (subs.length > 1 ? `<div class="chipsRow" style="margin-bottom:10px"><span class="${!hwSubj ? 'on' : ''}" data-cs="">Tout</span>${subs.map(n => `<span class="${hwSubj === n ? 'on' : ''}" data-cs="${esc(n)}">${subjBadge(n, 'sq mini')}${esc(n)}</span>`).join('')}</div>` : '') + (L.map(x => contenuHTML(x, false)).join('') || `<div class="empty" style="margin-top:12px">${contenus.length ? 'Rien pour cette matière.' : 'Le contenu des cours arrive à la prochaine synchro Pronote.'}</div>`);
+    bindSeg(); v.querySelectorAll('[data-cs]').forEach(b => b.onclick = () => { hwSubj = b.dataset.cs || null; rHomework(); });
+    v.querySelectorAll('.cCard').forEach((c, i) => c.onclick = e => { if (!e.target.closest('a')) openContenu(L[i].id); });
+    return;
+  }
   if (hwTab === 'notes') { v.innerHTML = seg + notesHTML(); bindSeg(); const na = $('#nAsk'); if (na) na.onclick = () => { go('ia'); ask('Regarde mes notes et dis-moi dans quelles matières je dois bosser en priorité, avec un plan concret pour cette semaine.'); }; return; }
   const pe = server.pronote?.connected && server.pronote?.last_error;
   const warn = pe ? `<div class="pnWarn"><b>Pronote ne se synchronise plus</b><span>Dernière mise à jour : ${server.pronote.last_sync ? new Date(server.pronote.last_sync).toLocaleString('fr-FR', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) : '—'}. Reconnecte-toi avec le QR code.</span><button class="btn p sm" id="pnWarnBtn">Reconnecter</button></div>` : '';
@@ -833,6 +874,30 @@ Texte :
   } catch (e) { out.textContent = e.code === 'rate_limited' ? 'Trop de demandes, réessaie dans une minute.' : "L'import n'a pas marché, réessaie avec moins de texte."; }
 }
 
+/* ---------- Emploi du temps en grille (semaine, façon Pronote) ---------- */
+const SHORT_SUBJ = { 'Physique-chimie & maths': 'PC-Maths', 'Physique-chimie': 'PC', 'Histoire-géo': 'Hist-géo', 'Allemand': 'Allem.', 'Anglais': 'Anglais', 'Français': 'Français', 'Accompagnement perso': 'AP', 'Vie de classe': 'VDC', 'Innovation techno': 'IT', 'Techno en anglais': 'ETLV', 'Espagnol': 'Espa.' };
+function weekGridHTML() {
+  const mon = startOfDay(agendaDay); mon.setDate(mon.getDate() - (mon.getDay() + 6) % 7);
+  let days = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
+  const has = d => coursOn(d).length || eventsOn(d).some(e => !e.allDay);
+  days = days.filter((d, i) => i < 5 || has(d));
+  const C = days.flatMap(d => coursOn(d)), E = days.flatMap(d => eventsOn(d).filter(e => !e.allDay));
+  const hrs = [...C.map(c => [new Date(c.starts_at), new Date(c.ends_at)]), ...E.map(e => [new Date(e.start), new Date(e.end)])];
+  const h0 = Math.min(8, ...hrs.map(([a]) => a.getHours())), h1 = Math.max(17, ...hrs.map(([, b]) => b.getHours() + (b.getMinutes() ? 1 : 0)));
+  const PX = 54, top = d => ((d.getHours() - h0) * 60 + d.getMinutes()) / 60 * PX, now = new Date();
+  const block = (a, b, inner, cls, style, attr = '') => `<div class="gBlk ${cls}" style="top:${top(a)}px;height:${Math.max(18, top(b) - top(a) - 2)}px;${style}"${attr}>${inner}</div>`;
+  const cols = days.map(d => {
+    const cs = coursOn(d).map(c => { const n = prettySubj(c.subject) || 'Cours', off = isOff(c), ct = contenuFor(c), col = subjColor(n);
+      return block(new Date(c.starts_at), new Date(c.ends_at), `<b><span class="gL">${esc(n)}</span><span class="gS">${esc(SHORT_SUBJ[n] || n)}</span></b>${c.room && !off ? `<small>${esc(c.room)}</small>` : ''}${off ? '<small>Annulé</small>' : ''}${ct ? `<i class="gC">${ICON.book}</i>` : ''}`, off ? 'off' : '', off ? '' : `--c:${col}`, ct ? ` data-ck="${ct.id}"` : ''); }).join('');
+    const es = eventsOn(d).filter(e => !e.allDay).map(e => block(new Date(e.start), new Date(e.end), `<b>${esc(e.title)}</b>`, 'ev', '')).join('');
+    const nowL = sameDay(d, now) && now.getHours() >= h0 && now.getHours() < h1 ? `<div class="gNow" style="top:${top(now)}px"></div>` : '';
+    return `<div class="gCol ${sameDay(d, now) ? 'isToday' : ''}"><div class="gHead"><small>${d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')}</small><b>${d.getDate()}</b></div><div class="gBody" style="height:${(h1 - h0) * PX}px">${cs}${es}${nowL}</div></div>`;
+  }).join('');
+  const lbl = `${mon.getDate()} – ${addDays(mon, 4).getDate()} ${addDays(mon, 4).toLocaleDateString('fr-FR', { month: 'long' })}`;
+  return `<div class="gNav"><button class="iconbtn" id="gPrev" aria-label="Semaine précédente">${SVG('<path d="M15 6l-6 6 6 6"/>')}</button><b>${lbl}</b><button class="iconbtn" id="gNext" aria-label="Semaine suivante">${SVG('<path d="M9 6l6 6-6 6"/>')}</button></div>
+    <div class="grid" style="--cols:${days.length}"><div class="gHours"><div class="gHead"></div><div class="gBody" style="height:${(h1 - h0) * PX}px">${Array.from({ length: h1 - h0 }, (_, i) => `<span style="top:${i * PX}px">${h0 + i}h</span>`).join('')}</div></div>${cols}</div>
+    ${C.length ? '' : '<div class="empty" style="margin-top:12px">Pas de cours cette semaine (vacances ?).</div>'}`;
+}
 function rAgenda() {
   const v = $('#v-agenda'), base = startOfDay(new Date());
   const days = Array.from({ length: 14 }, (_, i) => addDays(base, i));
@@ -842,11 +907,19 @@ function rAgenda() {
     ...allItems().filter(t => t.due === ymd(d)).map(t => ({ t: t.time || '23:58', when: t.time || 'Pour', cls: t.done ? '' : 'now', h: itemHTML(t, { noDue: true }) })),
   ].sort((a, b) => a.t.localeCompare(b.t));
   const list = itemsOn(agendaDay);
-  v.innerHTML = `<div class="week" id="week">${days.map(d => { const n = itemsOn(d).length; return `<button class="day ${sameDay(d, agendaDay) ? 'on' : ''} ${sameDay(d, base) ? 'today' : ''}" data-d="${ymd(d)}"><small>${d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')}</small><b>${d.getDate()}</b><div class="dots">${'<i></i>'.repeat(Math.min(n, 3))}</div></button>`; }).join('')}</div>
+  const modeSeg = `<div class="seg" id="aseg" style="margin-bottom:12px"><div class="pill"></div><button data-m="jour" class="${agendaMode === 'jour' ? 'on' : ''}">Jour</button><button data-m="semaine" class="${agendaMode === 'semaine' ? 'on' : ''}">Semaine</button></div>`;
+  const bindMode = () => { segPill('#aseg'); v.querySelectorAll('#aseg button').forEach(b => b.onclick = () => { agendaMode = b.dataset.m; store.set('orbit.agendaMode', agendaMode); rAgenda(); }); };
+  if (agendaMode === 'semaine') {
+    v.innerHTML = modeSeg + weekGridHTML(); bindMode();
+    $('#gPrev').onclick = () => { agendaDay = addDays(agendaDay, -7); rAgenda(); };
+    $('#gNext').onclick = () => { agendaDay = addDays(agendaDay, 7); rAgenda(); };
+    return;
+  }
+  v.innerHTML = modeSeg + `<div class="week" id="week">${days.map(d => { const n = itemsOn(d).length; return `<button class="day ${sameDay(d, agendaDay) ? 'on' : ''} ${sameDay(d, base) ? 'today' : ''}" data-d="${ymd(d)}"><small>${d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')}</small><b>${d.getDate()}</b><div class="dots">${'<i></i>'.repeat(Math.min(n, 3))}</div></button>`; }).join('')}</div>
     <div class="dayHead"><b>${dayTitle(agendaDay)[0]}</b><span>${dayTitle(agendaDay)[1]}</span><span class="n">${list.length}</span></div>
     <div class="tl">${list.map(x => `<div class="row ${x.cls}"><span class="when">${x.when || x.t}</span><span class="node"></span>${x.h}</div>`).join('') || '<div class="empty">Journée libre</div>'}</div>
     <div class="small muted" style="margin-top:16px">${server.flags?.ical ? `Google Agenda à jour${server.gcalAt ? ' · ' + fmtTime(server.gcalAt) : ''}${server.gcalError ? ' · ⚠️ ' + esc(server.gcalError) : ''} · <a href="#" id="gRef">Actualiser</a>` : 'Google Agenda pas encore relié : Réglages → Google Agenda.'}${server.pronote?.connected ? ' · Emploi du temps Pronote inclus' : ''}</div>`;
-  bindList(v);
+  bindList(v); bindMode();
   v.querySelectorAll('.day').forEach(b => b.onclick = () => { agendaDay = startOfDay(new Date(b.dataset.d + 'T12:00')); rAgenda(); });
   const gr = $('#gRef'); if (gr) gr.onclick = e => { e.preventDefault(); pull(false, true).then(() => toast('Google Agenda', 'Actualisé')); };
   const on = v.querySelector('.day.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' });
@@ -930,7 +1003,7 @@ function snapshotCtx() {
   }).join('\n');
   const nowS = daySchedule(new Date()), cur = nowS.find(x => x.start <= new Date() && new Date() < x.end), nx = nowS.find(x => x.start > new Date());
   const pos = cur ? `En ce moment : ${cur.title} jusqu'à ${fmtTime(cur.end)}.` : nx ? `Prochain : ${nx.title} à ${fmtTime(nx.start)}.` : 'Plus de cours aujourd\'hui.';
-  return `${todayCtx()} ${pos}${notesCtx()}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
+  return `${todayCtx()} ${pos}${notesCtx()}${contenusCtx()}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
 }
 let asking = false;
 async function ask(q) {
@@ -1186,6 +1259,7 @@ function boot() {
   pull(!lastSince);
   setInterval(() => pull(), 60e3);
   loadNotes(); setInterval(loadNotes, 10 * 60e3);
+  loadContenus(); setInterval(loadContenus, 15 * 60e3);
   if (focus) showFocus();
   setInterval(checkReminders, 30e3); setTimeout(checkReminders, 4000);
   setInterval(() => { if (current === 'aujourdhui' && document.visibilityState === 'visible') updateNow(); }, 20e3);
