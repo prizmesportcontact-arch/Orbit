@@ -784,3 +784,4 @@ body.glass .nav button.on,body.glass .tabbar button.on{color:#fff}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
   body.glass .bgFx i{animation:none}
 }
+.habit{display:inline-block;font-size:12px;font-weight:700;color:#000;background:var(--txt);border-radius:6px;padding:1px 7px;margin-right:4px}

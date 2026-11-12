@@ -569,12 +569,21 @@ function evHTML(e) {
 
 /* ---------- Bus : trajets maison ↔ lycée (Île-de-France Mobilités) ---------- */
 const HOMES = { ponthevrard: 'Ponthévrard', starnoult: 'Saint-Arnoult' };
-const weekIdx = d => Math.floor(Math.round((startOfDay(d) - new Date(2024, 0, 1)) / 864e5) / 7); // semaines depuis un lundi
-function homeFor(d) {
+// Garde alternée : la semaine change le vendredi soir (après les cours).
+// Période = du vendredi soir au vendredi soir suivant. Réf. : vendredi 5 janvier 2024.
+const daysFromRef = d => Math.round((startOfDay(d) - new Date(2024, 0, 5)) / 864e5);
+const periodOfDay = d => Math.floor((daysFromRef(d) - 0.5) / 7); // le vendredi (journée) appartient encore à l'ancienne semaine
+const periodNow = (t = new Date()) => periodOfDay(t) + (t.getDay() === 5 && t.getHours() >= 16 ? 1 : 0);
+function homeFor(d, leg = 'aller') {
   const b = settings.bus; if (!b || !HOMES[b.ref]) return null;
-  const odd = ((weekIdx(d) - b.week) % 2 + 2) % 2;
+  if (b.period == null) { b.period = periodNow(); delete b.week; saveSettings(); } // ancien réglage (semaine du lundi)
+  const p = leg === 'now' ? periodNow(d) : periodOfDay(d) + (leg === 'retour' && d.getDay() === 5 ? 1 : 0);
+  const odd = ((p - b.period) % 2 + 2) % 2;
   return odd ? (b.ref === 'ponthevrard' ? 'starnoult' : 'ponthevrard') : b.ref;
 }
+// Trajet habituel du matin (arrêt de départ + heure du 1er bus)
+const HABIT = { starnoult: { stop: /mairie/i, time: '07:38' }, ponthevrard: { stop: /mairie/i, time: '07:21' } };
+const isHabit = (j, home) => { const h = HABIT[home], f = j.sections.find(x => x.type === 'pt'); if (!h || !f || !h.stop.test(f.from)) return false; const [H, M] = h.time.split(':').map(Number), t = new Date(f.dep); return Math.abs(t.getHours() * 60 + t.getMinutes() - H * 60 - M) <= 4; };
 const navDT = d => { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}00`; };
 const busCache = new Map();
 async function busCall(action, body, ttl = 180e3) {
@@ -597,22 +606,29 @@ function busDay(now = new Date()) {
   return null;
 }
 async function busTrips(day) {
-  const home = homeFor(day.d); if (!home) return null;
+  const home = homeFor(day.d, 'aller'), homeBack = homeFor(day.d, 'retour'); if (!home) return null;
   const now = new Date();
   const goTarget = new Date(day.first.getTime() - 5 * 6e4);
-  let aller = null, retour = null;
+  let aller = null;
   if (now < day.first) {
-    aller = await busCall('journeys', { from: home, to: 'lycee', datetime: navDT(goTarget), represents: 'arrival', count: 3 });
-    if (!aller.journeys.length) { // aucun bus n'arrive à temps : on montre les premiers quand même
-      aller = await busCall('journeys', { from: home, to: 'lycee', datetime: navDT(new Date(day.first.getTime() - 3 * 36e5)), represents: 'departure', count: 3 });
-      aller.late = true;
-    }
-    aller.journeys = aller.journeys.filter(j => new Date(j.dep) > new Date(now.getTime() - 2 * 6e4)).slice(-3);
+    const h = HABIT[home], [H, M] = (h?.time || '07:00').split(':').map(Number);
+    const habitAt = new Date(day.d); habitAt.setHours(H, M - 15, 0, 0);
+    const [A, B] = await Promise.all([
+      busCall('journeys', { from: home, to: 'lycee', datetime: navDT(goTarget), represents: 'arrival', count: 3 }).catch(() => ({ journeys: [], disruptions: [] })),
+      busCall('journeys', { from: home, to: 'lycee', datetime: navDT(habitAt < goTarget ? habitAt : new Date(day.first.getTime() - 3 * 36e5)), represents: 'departure', count: 3 }).catch(() => ({ journeys: [], disruptions: [] })),
+    ]);
+    const seen = new Set(), all = [...A.journeys, ...B.journeys].filter(j => { const k = j.dep + j.arr; if (seen.has(k)) return false; seen.add(k); return true; })
+      .sort((a, b) => a.dep.localeCompare(b.dep));
+    all.forEach(j => { j.habit = isHabit(j, home); });
+    aller = { journeys: all.filter(j => new Date(j.dep) > new Date(now.getTime() - 2 * 6e4)).slice(0, 4), disruptions: [...(A.disruptions || []), ...(B.disruptions || [])] };
+    aller.late = !all.some(j => new Date(j.arr) <= day.first);
   }
   const back = new Date(Math.max(day.last.getTime() + 5 * 6e4, now.getTime()));
-  retour = await busCall('journeys', { from: 'lycee', to: home, datetime: navDT(back), represents: 'departure', count: 3 });
-  return { home, aller, retour, target: day.first };
+  const retour = await busCall('journeys', { from: 'lycee', to: homeBack, datetime: navDT(back), represents: 'departure', count: 3 });
+  return { home, homeBack, aller, retour, target: day.first };
 }
+// Le trajet à mettre en avant le matin : l'habituel s'il existe, sinon le dernier qui arrive à l'heure
+const bestAller = (L, first) => L.journeys.find(j => j.habit) || L.journeys.filter(j => new Date(j.arr) <= first).pop() || L.journeys[0];
 const minsTo = t => Math.round((new Date(t) - Date.now()) / 6e4);
 const inMin = m => m <= 0 ? 'maintenant' : m < 60 ? `dans ${m} min` : `dans ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 const lineChip = l => `<span class="lnChip" style="--lc:${l?.color || '#5B8CFF'};--lt:${l?.text || '#fff'}">${ICON.bus}${esc(l?.code || 'Bus')}</span>`;
@@ -630,7 +646,7 @@ function journeyHTML(j, target, open) {
   const m = minsTo(j.dep);
   return `<details class="jr${late ? ' late' : ''}"${open ? ' open' : ''}><summary>
       <div class="jrT"><b>${fmtTime(j.dep)}</b><span>arrivée ${fmtTime(j.arr)}</span></div>
-      <div class="jrM"><div class="jrC">${chain}</div><small>${f ? `Arrêt ${esc(f.from)}` : ''}${j.transfers ? `, ${j.transfers} correspondance${j.transfers > 1 ? 's' : ''}` : ', direct'}${late ? ', <em>arrive après le début du cours</em>' : ''}</small></div>
+      <div class="jrM"><div class="jrC">${chain}</div><small>${j.habit ? '<span class="habit">Ton bus habituel</span> ' : ''}${f ? `Arrêt ${esc(f.from)}` : ''}${j.transfers ? `, ${j.transfers} correspondance${j.transfers > 1 ? 's' : ''}` : ', direct'}${late ? ', <em>arrive après le début du cours</em>' : ''}</small></div>
       <div class="jrIn">${m > -2 && m < 600 ? inMin(m) : ''}</div></summary>
     <ol class="jrSteps">${steps}</ol>${f && sameDay(f.dep, new Date()) ? `<div class="jrRT" data-stop="${esc(f.stopId || '')}" data-line="${esc(f.lineId || '')}" data-dep="${esc(f.dep)}"><span class="spin"></span> Temps réel…</div>` : ''}</details>`;
 }
@@ -651,17 +667,17 @@ async function fillRealtime(root) {
   }
 }
 function busWeekSeg() {
-  const cur = homeFor(new Date());
+  const cur = homeFor(new Date(), 'now');
   return `<div class="busWhere"><span>Cette semaine, je pars de</span><div class="seg" id="busSeg"><div class="pill"></div>${Object.entries(HOMES).map(([k, l]) => `<button data-h="${k}" class="${cur === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>`;
 }
 let busBusy = false;
 async function rBus() {
   const v = $('#v-bus'), day = busDay();
-  const bindSeg = () => { segPill('#busSeg'); v.querySelectorAll('#busSeg button').forEach(b => b.onclick = () => { settings.bus = { ref: b.dataset.h, week: weekIdx(new Date()) }; saveSettings(); rBus(); }); };
-  if (!settings.bus) { v.innerHTML = busWeekSeg() + `<div class="empty" style="margin-top:14px">Choisis où tu dors cette semaine. Orbit alterne tout seul chaque lundi entre Ponthévrard et Saint-Arnoult. Tu pourras corriger à tout moment ici.</div>`; bindSeg(); return; }
+  const bindSeg = () => { segPill('#busSeg'); v.querySelectorAll('#busSeg button').forEach(b => b.onclick = () => { settings.bus = { ref: b.dataset.h, period: periodNow() }; saveSettings(); rBus(); }); };
+  if (!settings.bus) { v.innerHTML = busWeekSeg() + `<div class="empty" style="margin-top:14px">Choisis où tu dors cette semaine. Orbit alterne tout seul chaque vendredi soir entre Ponthévrard et Saint-Arnoult. Tu pourras corriger à tout moment ici.</div>`; bindSeg(); return; }
   if (!day) { v.innerHTML = busWeekSeg() + `<div class="empty" style="margin-top:14px">Pas de cours dans les 7 prochains jours, donc pas de trajet à prévoir.</div>`; bindSeg(); return; }
   const dayLbl = day.i === 0 ? "aujourd'hui" : day.i === 1 ? 'demain' : day.d.toLocaleDateString('fr-FR', { weekday: 'long' });
-  const home = homeFor(day.d);
+  const home = homeFor(day.d, 'aller'), homeBack = homeFor(day.d, 'retour');
   if (!v.querySelector('.busWrap')) v.innerHTML = busWeekSeg() + `<div class="busWrap">${skel(3, 84)}</div>`;
   else v.querySelector('.busWhere').outerHTML = busWeekSeg();
   bindSeg();
@@ -669,14 +685,14 @@ async function rBus() {
   try {
     const T = await busTrips(day);
     const W = v.querySelector('.busWrap'); if (!W) return;
-    const changeNote = homeFor(day.d) !== homeFor(new Date()) ? ` (tu seras à ${HOMES[home]})` : '';
+    const changeNote = home !== homeFor(new Date(), 'now') ? `, depuis ${HOMES[home]}` : '';
     const al = T.aller, re = T.retour;
     const dis = [...(al?.disruptions || []), ...(re?.disruptions || [])].filter((d, i, A) => d.text && A.findIndex(x => x.text === d.text) === i).slice(0, 3);
     const html = `${dis.length ? `<div class="pnWarn"><b>Perturbations sur le réseau</b>${dis.map(d => `<span>${esc(d.text)}</span>`).join('')}</div>` : ''}
       ${al ? `<div class="dayHead"><b>Aller ${dayLbl}</b><span>${esc(day.firstSubj)} à ${fmtTime(day.first)}${changeNote}</span></div>
-        ${al.late ? `<div class="busNote">Aucun bus n'arrive avant ${fmtTime(day.first)} depuis ${HOMES[home]}. Voici les premiers de la journée.</div>` : ''}
-        <div class="jrList">${al.journeys.map((j, i) => journeyHTML(j, day.first, i === (al.late ? 0 : al.journeys.length - 1))).join('') || '<div class="empty">Aucun trajet trouvé.</div>'}</div>` : ''}
-      <div class="dayHead"><b>Retour ${dayLbl}</b><span>fin des cours à ${fmtTime(day.last)}, vers ${HOMES[home]}</span></div>
+        ${al.late ? `<div class="busNote">Aucun bus n'arrive avant ${fmtTime(day.first)} depuis ${HOMES[home]}.</div>` : ''}
+        <div class="jrList">${al.journeys.map(j => journeyHTML(j, day.first, j === bestAller(al, day.first))).join('') || '<div class="empty">Aucun trajet trouvé.</div>'}</div>` : ''}
+      <div class="dayHead"><b>Retour ${dayLbl}</b><span>fin des cours à ${fmtTime(day.last)}, vers ${HOMES[homeBack]}${homeBack !== home ? ' (changement de semaine)' : ''}</span></div>
       <div class="jrList">${re.journeys.map((j, i) => journeyHTML(j, null, !al && i === 0)).join('') || '<div class="empty">Aucun trajet trouvé.</div>'}</div>
       <div class="small muted" style="margin-top:16px">Horaires et temps réel : Île-de-France Mobilités. Touche un trajet pour voir le détail.</div>`;
     if (W.dataset.sig === html) return; W.dataset.sig = html; W.innerHTML = html;
@@ -698,14 +714,14 @@ async function busHome() {
   try {
     const T = await busTrips(day); const L = morning ? T.aller : T.retour; if (!L) return;
     const J = L.journeys.filter(j => minsTo(j.dep) >= -1);
-    const j = morning ? (L.late ? J[0] : J.filter(x => new Date(x.arr) <= day.first).pop() || J[0]) : J[0];
+    const j = morning ? bestAller({ journeys: J }, day.first) : J[0];
     if (!j) { box.innerHTML = ''; return; }
     const f = firstPt(j), m = minsTo(j.dep), sig = j.dep + m;
     if (sig === busHomeSig && box.innerHTML) return; busHomeSig = sig;
     box.innerHTML = `<button class="card busCard${m <= 10 ? ' hot' : ''}" id="busCardBtn">
-      <div class="bcTop"><span>${morning ? 'Bus pour le lycée' : `Bus pour ${HOMES[T.home]}`}</span><b>${inMin(m)}</b></div>
+      <div class="bcTop"><span>${morning ? (j.habit ? 'Ton bus habituel pour le lycée' : 'Bus pour le lycée') : `Bus pour ${HOMES[T.homeBack]}`}</span><b>${inMin(m)}</b></div>
       <div class="bcMain"><b>Pars à ${fmtTime(j.dep)}</b>${f ? lineChip(f.line) : ''}</div>
-      <small>${f ? `Arrêt ${esc(f.from)}, bus à ${fmtTime(f.dep)}. ` : ''}Arrivée ${fmtTime(j.arr)}${morning && L.late ? ', après le début du cours' : ''}.</small></button>`;
+      <small>${f ? `Arrêt ${esc(f.from)}, bus à ${fmtTime(f.dep)}. ` : ''}Arrivée ${fmtTime(j.arr)}${morning && new Date(j.arr) > day.first ? `, après le début du cours (${fmtTime(day.first)})` : ''}.</small></button>`;
     $('#busCardBtn').onclick = () => go('bus');
   } catch { box.innerHTML = ''; }
 }
