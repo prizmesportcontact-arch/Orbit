@@ -618,3 +618,73 @@ body.glass .gBody{background:repeating-linear-gradient(to bottom,rgba(255,255,25
 .gBlk b{word-break:normal;overflow-wrap:normal;hyphens:none}
 .gS{display:none}
 @media (max-width:899px){.gL{display:none}.gS{display:inline}.gBlk b{font-size:10.5px;letter-spacing:-.2px}}
+/* ================= Mode Réviser ================= */
+.iaSeg{margin:0}
+.iaSeg button{padding:0 14px}
+.stGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.stGrid button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:14px;border-radius:18px;background:var(--card);border:1px solid rgba(255,255,255,.05);text-align:left;color:var(--txt);transition:transform .15s}
+.stGrid button:active{transform:scale(.97)}
+.stGrid b{font-size:14.5px}.stGrid span{font-size:12px;color:var(--mut)}
+.stGrid button:first-child{background:radial-gradient(120% 120% at 0 0,color-mix(in srgb,var(--acc) 30%,transparent),transparent 70%),var(--card)}
+.fStrip{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}.fStrip::-webkit-scrollbar{display:none}
+.fChip{flex:none;display:flex;align-items:center;gap:9px;max-width:240px;padding:10px 12px;border-radius:16px;background:var(--card);color:var(--txt);text-align:left}
+.fChip span{display:flex;flex-direction:column;min-width:0}.fChip b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fChip small{font-size:11.5px;color:var(--mut)}
+.fRow{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border-radius:16px;background:var(--card2);color:var(--txt);text-align:left}
+.fRow span{display:flex;flex-direction:column;min-width:0}.fRow b{font-size:14.5px}.fRow small{font-size:12px;color:var(--mut)}
+.stImgs{display:flex;gap:8px;padding:0 2px 8px}.stImgs:empty{display:none}
+.stImgs span{position:relative}.stImgs img{width:58px;height:58px;object-fit:cover;border-radius:12px;display:block}
+.stImgs button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:#000c;color:#fff;font-size:14px;line-height:1}
+.uImgs{display:flex;gap:6px;margin-bottom:6px}.uImgs img{width:88px;height:88px;object-fit:cover;border-radius:10px}
+.msg.a .tex.disp{display:block;text-align:center;margin:8px 0;overflow-x:auto;overflow-y:hidden}
+.msg.a .katex{font-size:1.05em}
+.mmd{margin:10px 0;padding:10px;border-radius:14px;background:rgba(255,255,255,.04);overflow-x:auto;text-align:center}
+.mmd svg{max-width:100%;height:auto}
+.mmdLoad{font-size:12.5px;color:var(--mut);padding:14px}
+pre.code{white-space:pre-wrap;font-size:12.5px;background:rgba(0,0,0,.35);padding:10px 12px;border-radius:12px;overflow-x:auto;margin:8px 0}
+.tblW{overflow-x:auto;margin:8px 0}.tblW table{border-collapse:collapse;font-size:13.5px;min-width:100%}
+.tblW th,.tblW td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left;vertical-align:top}.tblW th{color:var(--acc);font-weight:800}
+.msgAct button[data-mkfiche]{color:var(--acc)}
+/* fiche & quiz en plein écran */
+.ficheO{position:fixed;inset:0;z-index:85;display:flex;justify-content:center;opacity:0;transition:opacity .3s var(--ease)}
+.ficheO.on{opacity:1}
+.fBg2{position:absolute;inset:0;background:rgba(3,2,2,.82);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+.fWrap{position:relative;width:min(720px,100%);height:100%;overflow-y:auto;padding:calc(18px + var(--safeT)) 18px calc(30px + var(--safeB));display:flex;flex-direction:column;gap:14px;transform:translateY(20px);transition:transform .4s var(--ease)}
+.ficheO.on .fWrap{transform:none}
+.fTop{display:flex;align-items:flex-start;gap:12px}.fTop .sq{width:48px;height:48px;border-radius:15px}
+.fTop h2{font-family:var(--disp);font-size:26px;font-weight:800;letter-spacing:-.8px;line-height:1.1;text-wrap:balance}
+.fTop small{font-size:12px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.6px}
+.fTop .iconbtn{flex:none;margin-left:auto}
+.fRes{font-size:15.5px;line-height:1.55;color:var(--mut)}
+.fSec{background:var(--card);border-radius:20px;padding:16px 18px}
+.fSec h3{font-family:var(--disp);font-size:17px;font-weight:800;margin-bottom:8px;color:var(--txt)}
+.fSec ul,.fiBox ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:7px}
+.fSec li,.fiBox li{position:relative;padding-left:16px;line-height:1.5;font-size:14.5px}
+.fSec li:before,.fiBox li:before{content:"";position:absolute;left:2px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--acc)}
+.fiBox{border-radius:20px;padding:16px 18px}
+.fiBox h4{font-size:12.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px}
+.fiBox.fKey{background:color-mix(in srgb,var(--acc) 16%,var(--card));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--acc) 40%,transparent)}.fiBox.fKey h4{color:var(--acc)}
+.fiBox.fTrap{background:color-mix(in srgb,#ff4d5e 12%,var(--card));box-shadow:inset 0 0 0 1px #ff4d5e55}.fiBox.fTrap h4{color:#ff8a94}.fiBox.fTrap li:before{background:#ff4d5e}
+.fDefs{display:flex;flex-direction:column;gap:8px}.fDefs div{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:14px;background:var(--card2)}.fDefs b{color:var(--acc);font-size:14px}.fDefs span{font-size:14px;line-height:1.5}
+.fForm{padding:10px 12px;border-radius:14px;background:var(--card2);margin-bottom:8px}.fForm small{font-size:12px;color:var(--mut);font-weight:700}.fForm .tex.disp{display:block;text-align:center;margin:6px 0;font-size:1.15em;overflow-x:auto}.fForm p{font-size:13.5px;color:var(--mut)}
+.fActs{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.btn.danger{background:#ff4d5e;color:#fff}
+.fLoad{margin:auto 0;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}.fLoad .aiAv{width:52px;height:52px;border-radius:16px}.fLoad b{font-family:var(--disp);font-size:22px}.fLoad span{color:var(--mut)}
+.qTop{display:flex;align-items:center;gap:12px;font-size:13px;font-weight:700;color:var(--mut)}
+.qBar{flex:1;height:8px;border-radius:9px;background:rgba(255,255,255,.08);overflow:hidden}.qBar i{display:block;height:100%;background:var(--acc);border-radius:9px;transition:width .4s var(--ease)}
+.qQ{font-family:var(--disp);font-size:22px;font-weight:800;letter-spacing:-.4px;line-height:1.25;margin-top:6px;text-wrap:balance}
+.qChoices{display:flex;flex-direction:column;gap:10px}
+.qChoices button{display:flex;align-items:center;gap:12px;padding:14px;border-radius:18px;background:var(--card);color:var(--txt);text-align:left;font-size:15px;border:1.5px solid transparent;transition:all .2s}
+.qChoices button i{flex:none;width:30px;height:30px;border-radius:10px;background:var(--card2);display:grid;place-items:center;font-style:normal;font-weight:800;font-size:13px}
+.qChoices button.good{border-color:#3ee08f;background:color-mix(in srgb,#3ee08f 16%,var(--card))}.qChoices button.good i{background:#3ee08f;color:#06210f}
+.qChoices button.bad{border-color:#ff4d5e;background:color-mix(in srgb,#ff4d5e 14%,var(--card));animation:shake .35s}.qChoices button.bad i{background:#ff4d5e;color:#fff}
+.qChoices button.dim{opacity:.45}
+@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.qExp{display:flex;flex-direction:column;gap:8px;opacity:0;transform:translateY(8px);transition:all .3s var(--ease)}.qExp.on{opacity:1;transform:none}
+.qExp b{font-family:var(--disp);font-size:18px}.qExp p{color:var(--mut);line-height:1.5}.qExp .btn{align-self:flex-start;margin-top:4px}
+.qEnd{margin:auto 0;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.qScore{font-family:var(--disp);font-size:88px;font-weight:800;letter-spacing:-4px;line-height:1}.qScore span{font-size:32px;color:var(--mut);letter-spacing:0}
+.qEnd .fActs{justify-content:center}
+body.glass .fSec,body.glass .qChoices button,body.glass .stGrid button{background:linear-gradient(135deg,rgba(255,255,255,.14),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.14);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.msg.a hr{border:0;height:1px;background:rgba(255,255,255,.1);margin:12px 0}
+.msg.a blockquote{margin:8px 0;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--acc) 12%,transparent);border-left:3px solid var(--acc);font-size:14.5px}
+.msg.a h4{font-size:16px}

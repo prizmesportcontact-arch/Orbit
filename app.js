@@ -942,6 +942,8 @@ function fmtMsg(txt) {
     const l = raw.trim();
     if (!l) { close(); continue; }
     let m;
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(l)) { close(); out.push('<hr>'); continue; }
+    if ((m = l.match(/^>\s?(.*)$/))) { close(); if (out.length && out[out.length - 1].startsWith('<blockquote>')) out[out.length - 1] = out[out.length - 1].replace('</blockquote>', `<br>${inline(m[1])}</blockquote>`); else out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue; }
     if ((m = l.match(/^#{1,4}\s*(.+)$/)) || (m = l.match(/^\*\*([^*]{2,60})\*\*\s*:?$/)) || (l.length < 48 && /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|aujourd'hui|demain|ce soir|ce week-end|priorit|conseil|à faire|matin|après-midi|soir)/i.test(l) && /:$/.test(l) && (m = [l, l.replace(/:$/, '')]))) { close(); out.push(`<h4>${inline(m[1].replace(/\*\*/g, '').replace(/:$/, ''))}</h4>`); continue; }
     if ((m = l.match(/^[-•*]\s+(.+)$/))) { if (!list || list.t !== 'ul') { close(); list = { t: 'ul', items: [] }; } list.items.push(`<li>${inline(m[1])}</li>`); continue; }
     if ((m = l.match(/^\d+[.)]\s+(.+)$/))) { if (!list || list.t !== 'ol') { close(); list = { t: 'ol', items: [] }; } list.items.push(`<li>${inline(m[1])}</li>`); continue; }
@@ -952,7 +954,7 @@ function fmtMsg(txt) {
 const AI_AV = `<span class="aiAv">${SVG('<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>')}</span>`;
 function msgHTML(m, i) {
   if (m.role === 'user') return `<div class="msg u">${esc(m.content)}</div>`;
-  return `<div class="msgRow">${AI_AV}<div class="msg a${m.err ? ' err' : ''}">${fmtMsg(m.content)}${m.err ? '' : `<div class="msgAct"><button data-copy="${i}">Copier</button>${m.q ? `<button data-redo="${i}">Autre réponse</button>` : ''}</div>`}</div></div>`;
+  return `<div class="msgRow">${AI_AV}<div class="msg a${m.err ? ' err' : ''}">${fmtRich(m.content)}${m.err ? '' : `<div class="msgAct"><button data-copy="${i}">Copier</button>${m.q ? `<button data-redo="${i}">Autre réponse</button>` : ''}</div>`}</div></div>`;
 }
 function paintChat(stick = true) {
   const L = $('#chatList'); if (!L) return;
@@ -963,14 +965,16 @@ function paintChat(stick = true) {
   $('#iaSugg').hidden = chat.length > 0 || asking;
   $('#iaNew').hidden = !chat.length;
   const inp = $('#chatIn'), btn = $('#chatF button:last-child'); if (inp) { inp.disabled = asking; btn.disabled = asking; }
+  enhance(L);
   if (stick || atBottom) requestAnimationFrame(() => { const last = L.querySelector('.msgRow:last-child, .msg.u:last-child'); if (last && last.offsetHeight > L.clientHeight * .7 && !asking && chat.at(-1)?.role === 'assistant') L.scrollTop = last.offsetTop - 10; else L.scrollTop = L.scrollHeight; });
 }
 function rAI(force) {
   const v = $('#v-ia');
   if (!server.flags?.ai) { v.classList.remove('iaV'); v.innerHTML = `<div class="chatwrap"><div class="msg a">Pour discuter avec moi, ajoute une clé IA gratuite dans Réglages (Groq, 1 minute).</div><button class="btn p" id="goSet" style="align-self:flex-start">Ouvrir les réglages</button></div>`; $('#goSet').onclick = openSettings; return; }
+  if (iaMode === 'reviser') return rStudy(force);
   if ($('#chatList') && !force) return; // déjà affiché : on ne reconstruit pas (garde le défilement et la saisie)
   v.classList.add('iaV');
-  v.innerHTML = `<div class="iaTop"><div><span class="liveDot"></span><span>${server.flags?.groq ? 'Groq' : 'Gemini'} · connaît ton planning</span></div><button class="btn" id="iaNew" hidden>Nouvelle conv.</button></div>
+  v.innerHTML = `<div class="iaTop">${iaSeg()}<button class="btn" id="iaNew" hidden>Nouvelle conv.</button></div>
     <div class="chatList" id="chatList"></div>
     <div class="iaBottom">
       <div class="sugg" id="iaSugg">${IA_SUGG.map(([l, q]) => `<button data-q="${esc(q)}">${l}</button>`).join('')}</div>
@@ -983,6 +987,7 @@ function rAI(force) {
   $('#chatF').onsubmit = e => { e.preventDefault(); const q = inp.value.trim(); if (q) { inp.value = ''; grow(); ask(q); } };
   v.querySelectorAll('#iaSugg button').forEach(b => b.onclick = () => ask(b.dataset.q));
   $('#iaNew').onclick = () => { chat = []; saveChat(); paintChat(); };
+  bindIaSeg();
   $('#chatMic').onclick = e => toggleVoice(e.currentTarget, inp);
   $('#chatList').onclick = e => {
     const c = e.target.closest('[data-copy]'), r = e.target.closest('[data-redo]');
@@ -1006,6 +1011,258 @@ function snapshotCtx() {
   return `${todayCtx()} ${pos}${notesCtx()}${contenusCtx()}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
 }
 let asking = false;
+
+/* ================= Rendu riche : Markdown + formules (KaTeX) + schémas (Mermaid) ================= */
+function fmtRich(txt) {
+  const parts = String(txt || '').split(/```(\w*)\n?([\s\S]*?)```/g);
+  let out = '';
+  for (let i = 0; i < parts.length; i += 3) {
+    out += mdBlock(parts[i]);
+    if (i + 2 < parts.length) {
+      const lang = parts[i + 1], code = parts[i + 2].trim();
+      out += lang === 'mermaid' ? `<div class="mmd" data-src="${encodeURIComponent(code)}"><div class="mmdLoad">Schéma en cours…</div></div>` : `<pre class="code">${esc(code)}</pre>`;
+    }
+  }
+  return out;
+}
+function mdBlock(t) {
+  if (!t.trim()) return '';
+  const math = []; const keep = (tex, disp) => { math.push([tex, disp]); return `⟦${math.length - 1}⟧`; };
+  t = t.replace(/\$\$([\s\S]+?)\$\$/g, (_, x) => keep(x, true)).replace(/\\\[([\s\S]+?)\\\]/g, (_, x) => keep(x, true))
+       .replace(/\$([^$\n]{1,200}?)\$/g, (_, x) => keep(x, false)).replace(/\\\(([\s\S]+?)\\\)/g, (_, x) => keep(x, false));
+  // tableaux Markdown simples
+  t = t.replace(/((?:^\|.*\|[ \t]*\n?){2,})/gm, blk => {
+    const rows = blk.trim().split('\n').filter(r => !/^\|\s*:?-{2,}/.test(r)).map(r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim()));
+    return `\n⟪${encodeURIComponent(JSON.stringify(rows))}⟫\n`;
+  });
+  let h = fmtMsg(t);
+  h = h.replace(/<p>⟪([^⟫]+)⟫<\/p>/g, (_, j) => { const rows = JSON.parse(decodeURIComponent(j)); return `<div class="tblW"><table>${rows.map((r, i) => `<tr>${r.map(c => i ? `<td>${fmtInline(c)}</td>` : `<th>${fmtInline(c)}</th>`).join('')}</tr>`).join('')}</table></div>`; });
+  h = h.replace(/\*(?!\s)([^*<]+?)\*/g, '<i>$1</i>');
+  return h.replace(/⟦(\d+)⟧/g, (_, n) => { const [tex, disp] = math[+n]; return `<span class="tex${disp ? ' disp' : ''}" data-tex="${encodeURIComponent(tex)}">${esc(tex)}</span>`; });
+}
+const fmtInline = x => esc(x).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+function loadScript(src) { return new Promise((ok, ko) => { if (document.querySelector(`script[src="${src}"]`)) { const w = () => setTimeout(ok, 50); return w(); } const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
+let katexP = null, mermaidP = null;
+function enhance(root) {
+  if (!root) return;
+  const tex = root.querySelectorAll('.tex:not(.done)');
+  if (tex.length) {
+    katexP = katexP || (() => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'vendor/katex/katex.min.css'; document.head.appendChild(l); return loadScript('vendor/katex/katex.min.js'); })();
+    katexP.then(() => tex.forEach(el => { try { window.katex.render(decodeURIComponent(el.dataset.tex), el, { displayMode: el.classList.contains('disp'), throwOnError: false }); el.classList.add('done'); } catch { } })).catch(() => { });
+  }
+  const mm = root.querySelectorAll('.mmd:not(.done)');
+  if (mm.length) {
+    mermaidP = mermaidP || loadScript('vendor/mermaid.min.js').then(() => window.mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif', themeVariables: { primaryColor: '#2a2320', primaryBorderColor: getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#ff6a47', primaryTextColor: '#f7f2ec', lineColor: '#bdb4ac', fontSize: '15px' } }));
+    mermaidP.then(async () => { for (const el of mm) { el.classList.add('done'); const src = decodeURIComponent(el.dataset.src); try { const { svg } = await window.mermaid.render('m' + Math.random().toString(36).slice(2), src); el.innerHTML = svg; } catch { el.innerHTML = `<pre class="code">${esc(src)}</pre>`; } } }).catch(() => mm.forEach(el => el.innerHTML = '<div class="mmdLoad">Schéma indisponible hors connexion</div>'));
+  }
+}
+
+/* ================= Mode Réviser : prof perso, fiches, quiz, photo d'exercice ================= */
+let iaMode = store.get('orbit.iaMode', 'orga');
+let tutor = store.get('orbit.tutor', []), studying = false, stImgs = [];
+let fiches = store.get('orbit.fiches', []);
+const saveTutor = () => store.set('orbit.tutor', tutor.slice(-30));
+const iaSeg = () => `<div class="seg iaSeg" id="iaSeg"><div class="pill"></div><button data-m="orga" class="${iaMode === 'orga' ? 'on' : ''}">Organisation</button><button data-m="reviser" class="${iaMode === 'reviser' ? 'on' : ''}">Réviser</button></div>`;
+function bindIaSeg() { segPill('#iaSeg'); document.querySelectorAll('#iaSeg button').forEach(b => b.onclick = () => { iaMode = b.dataset.m; store.set('orbit.iaMode', iaMode); rAI(true); }); }
+async function loadFiches() { try { const r = await extra('fiches'); if (Array.isArray(r.fiches)) { fiches = r.fiches; store.set('orbit.fiches', fiches); if (current === 'ia' && iaMode === 'reviser' && !tutor.length) paintStudy(false); } } catch { } }
+async function studyCall(body) {
+  const r = await withTimeout(extra('study', body), body.mode === 'chat' ? 70000 : 125000);
+  if (!r.ok) { const e = new Error(r.error || 'erreur'); e.code = r.error === 'no_key' ? 'no_key' : /rate|429|limit/i.test(r.error || '') ? 'rate_limited' : ''; throw e; }
+  return r.text;
+}
+const parseJSON = t => { try { return JSON.parse(t); } catch { const m = String(t).match(/\{[\s\S]*\}/); return m ? JSON.parse(m[0]) : null; } };
+function studyCtx(subject) {
+  const sub = (subject || '').toLowerCase(); const C = contenus.filter(x => !sub || (prettySubj(x.subject) || '').toLowerCase().includes(sub) || sub.includes((prettySubj(x.subject) || '').toLowerCase()));
+  const parts = [];
+  if (C.length) parts.push('Cahier de textes : ' + C.slice(0, 10).map(x => `${prettySubj(x.subject)} (${x.start.slice(0, 10)}) : ${x.items.map(i => [i.title, i.text].filter(Boolean).join(' — ')).join(' / ')}`).join(' ; '));
+  const D = uniqueDevoirs().filter(d => !sub || (prettySubj(d.subject) || '').toLowerCase().includes(sub)).slice(0, 8);
+  if (D.length) parts.push('Devoirs à venir : ' + D.map(d => `${prettySubj(d.subject)} pour le ${d.due} : ${decode(d.description).slice(0, 200)}`).join(' ; '));
+  if (notes && !sub) parts.push(notesCtx());
+  return parts.join('\n');
+}
+const STUDY_SUGG = [['Fiche', 'fiche'], ['Quiz', 'quiz'], ['Photo d\'exercice', 'photo'], ['Mes fiches', 'list']];
+function rStudy(force) {
+  const v = $('#v-ia');
+  if ($('#stList') && !force) return;
+  v.classList.add('iaV');
+  v.innerHTML = `<div class="iaTop">${iaSeg()}<button class="btn" id="stNew" hidden>Effacer</button></div>
+    <div class="chatList" id="stList"></div>
+    <div class="iaBottom">
+      <div class="sugg" id="stSugg">${STUDY_SUGG.map(([l, k]) => `<button data-k="${k}">${l}${k === 'list' && fiches.length ? ` · ${fiches.length}` : ''}</button>`).join('')}</div>
+      <div class="stImgs" id="stImgs"></div>
+      <form class="chatin" id="stF"><button type="button" class="mic" id="stCam" aria-label="Ajouter une photo">${SVG('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>')}</button><textarea id="stIn" rows="1" placeholder="Ta question de cours…" aria-label="Question" enterkeyhint="send"></textarea><button type="button" class="mic" id="stMic" aria-label="Dicter">${MIC_SVG}</button><button aria-label="Envoyer">${SVG('<path d="M5 12h14M13 6l6 6-6 6"/>')}</button></form>
+      <input type="file" id="stFile" accept="image/*" multiple hidden>
+    </div>`;
+  bindIaSeg();
+  const inp = $('#stIn'), grow = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px'; };
+  inp.oninput = grow;
+  inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(max-width:899px)').matches) { e.preventDefault(); $('#stF').requestSubmit(); } };
+  $('#stF').onsubmit = e => { e.preventDefault(); const q = inp.value.trim(); if (q || stImgs.length) { inp.value = ''; grow(); askTutor(q || 'Aide-moi sur cet exercice (photo).'); } };
+  $('#stMic').onclick = e => toggleVoice(e.currentTarget, inp);
+  $('#stCam').onclick = () => $('#stFile').click();
+  $('#stFile').onchange = async e => { for (const f of [...e.target.files].slice(0, 4 - stImgs.length)) stImgs.push({ mime: 'image/jpeg', data: await shrinkImg(f) }); e.target.value = ''; paintImgs(); inp.focus(); };
+  $('#stNew').onclick = () => { tutor = []; saveTutor(); paintStudy(); };
+  v.querySelectorAll('#stSugg button').forEach(b => b.onclick = () => { const k = b.dataset.k; if (k === 'fiche') ficheSheet(); else if (k === 'quiz') quizSheet(); else if (k === 'photo') $('#stFile').click(); else fichesSheet(); });
+  $('#stList').onclick = e => {
+    const f = e.target.closest('[data-fiche]'); if (f) return openFiche(f.dataset.fiche);
+    const a = e.target.closest('[data-st]'); if (a) { const k = a.dataset.st; if (k === 'fiche') ficheSheet(); else if (k === 'quiz') quizSheet(); else if (k === 'photo') $('#stFile').click(); else if (k === 'ex') { inp.value = 'Explique-moi '; inp.focus(); } }
+    const c = e.target.closest('[data-copy]'); if (c) navigator.clipboard?.writeText(tutor[+c.dataset.copy].content).then(() => toast('Copié', ''), () => { });
+    const mk = e.target.closest('[data-mkfiche]'); if (mk) { const m = tutor[+mk.dataset.mkfiche]; makeFiche({ topic: (tutor[+mk.dataset.mkfiche - 1]?.content || '').slice(0, 300), extra: m.content }); }
+  };
+  paintImgs(); paintStudy(); loadFiches();
+}
+function paintImgs() { const w = $('#stImgs'); if (!w) return; w.innerHTML = stImgs.map((im, i) => `<span><img src="data:${im.mime};base64,${im.data}" alt=""><button data-rm="${i}" aria-label="Retirer">×</button></span>`).join(''); w.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { stImgs.splice(+b.dataset.rm, 1); paintImgs(); }); }
+function shrinkImg(file, max = 1600) {
+  return new Promise((ok, ko) => { const img = new Image(); img.onload = () => { const k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); ok(c.toDataURL('image/jpeg', .85).split(',')[1]); URL.revokeObjectURL(img.src); }; img.onerror = ko; img.src = URL.createObjectURL(file); });
+}
+function paintStudy(stick = true) {
+  const L = $('#stList'); if (!L) return;
+  const fs = fiches.slice(0, 8);
+  L.innerHTML = (tutor.length ? '' : `<div class="chatHello">${AI_AV}<h3>Ton prof perso</h3><p>Explications claires avec schémas et formules, aide sur un exercice en photo (il te guide au lieu de tout faire), fiches de révision et quiz. Il connaît tes cours, ton cahier de textes et tes notes.</p>
+      <div class="stGrid"><button data-st="fiche"><b>Faire une fiche</b><span>synthèse + schéma</span></button><button data-st="quiz"><b>M'interroger</b><span>quiz de 8 questions</span></button><button data-st="photo"><b>Exercice en photo</b><span>il te guide pas à pas</span></button><button data-st="ex"><b>M'expliquer</b><span>une notion du cours</span></button></div>
+      ${fs.length ? `<div class="dayHead" style="margin-top:6px"><b>Mes fiches</b><span class="n">${fiches.length}</span></div><div class="fStrip">${fs.map(f => `<button class="fChip" data-fiche="${f.id}">${subjBadge(f.subject, 'sq mini')}<span><b>${esc(f.title)}</b><small>${esc(f.subject || '')}${f.score != null ? ' · quiz ' + f.score + '/8' : ''}</small></span></button>`).join('')}</div>` : ''}</div>`)
+    + tutor.map((m, i) => m.role === 'user' ? `<div class="msg u">${m.imgs ? `<div class="uImgs">${m.imgs.map(d => `<img src="data:image/jpeg;base64,${d}" alt="">`).join('')}</div>` : ''}${esc(m.content)}</div>`
+      : `<div class="msgRow">${AI_AV}<div class="msg a${m.err ? ' err' : ''}">${fmtRich(m.content)}${m.err ? '' : `<div class="msgAct"><button data-copy="${i}">Copier</button><button data-mkfiche="${i}">En faire une fiche</button></div>`}</div></div>`).join('')
+    + (studying ? `<div class="msgRow">${AI_AV}<div class="msg a think"><i></i><i></i><i></i></div></div>` : '');
+  enhance(L);
+  const n = $('#stNew'); if (n) n.hidden = !tutor.length;
+  const inp = $('#stIn'); if (inp) inp.disabled = studying;
+  if (stick) requestAnimationFrame(() => { const last = L.querySelector('.msgRow:last-child'); if (last && last.offsetHeight > L.clientHeight * .7 && !studying) L.scrollTop = last.offsetTop - 10; else L.scrollTop = L.scrollHeight; });
+}
+async function askTutor(q) {
+  if (studying) return; studying = true;
+  const imgs = stImgs.slice(); stImgs = []; paintImgs();
+  tutor.push({ role: 'user', content: q, ...(imgs.length ? { imgs: imgs.map(i => i.data).slice(0, 2) } : {}) });
+  paintStudy();
+  try {
+    const text = await studyCall({ mode: 'chat', messages: tutor.filter(m => !m.err).map(m => ({ role: m.role, content: m.content })), images: imgs, context: studyCtx('') });
+    tutor.push({ role: 'assistant', content: text });
+  } catch (e) { tutor.push({ role: 'assistant', err: true, content: e.code === 'no_key' ? 'Il faut une clé IA dans Réglages.' : e.code === 'rate_limited' ? 'Trop de demandes, réessaie dans une minute.' : 'Le prof n\'a pas pu répondre (' + (e.message || 'erreur') + '). Réessaie.' }); }
+  finally { studying = false; tutor.forEach(m => { if (m.imgs && m !== tutor.at(-2)) delete m.imgs; }); saveTutor(); if ($('#stList')) paintStudy(); }
+}
+function subjectChoices() {
+  const S = new Set([...uniqueDevoirs().map(d => prettySubj(d.subject)), ...contenus.map(x => prettySubj(x.subject)), ...(notes?.subjects || []).map(x => subjParts(x.name).main), ...(server.cours || []).map(c => prettySubj(c.subject))].filter(Boolean));
+  return [...S].filter(n => !/vie de classe|accompagnement/i.test(n));
+}
+function ficheSheet(pre = {}) {
+  const subs = subjectChoices(); let subj = pre.subject || null;
+  const s = $('#sheet');
+  const sugg = () => { const C = contenus.filter(x => subj && prettySubj(x.subject) === subj).slice(0, 4); return C.length ? `<label class="l">D'après tes derniers cours</label><div class="chipsRow">${C.map(x => { const t = (x.items[0].title || x.items[0].text).split('\n')[0].slice(0, 60); return `<span data-t="${esc(t)}">${esc(t)}</span>`; }).join('')}</div>` : ''; };
+  const paint = () => {
+    s.innerHTML = `<div class="grab"></div><h2>Nouvelle fiche</h2><p class="small muted" style="margin-top:4px">L'IA fait une synthèse fiable avec définitions, formules, schéma et pièges à éviter.</p>
+      <label class="l">Matière</label><div class="chipsRow">${subs.map(n => `<span class="${subj === n ? 'on' : ''}" data-s="${esc(n)}">${subjBadge(n, 'sq mini')}${esc(n)}</span>`).join('')}</div>
+      <label class="l" for="fTopic">Sujet</label><input class="inp" id="fTopic" placeholder="ex : forme canonique, prétérit, la Boétie…" value="${esc(pre.topic || '')}">
+      <div id="fSugg">${sugg()}</div>
+      <label class="l">Photos de ton cours (facultatif)</label><div class="inline"><button class="btn" id="fPh">${SVG('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>').replace('<svg', '<svg style="width:16px;height:16px;margin-right:6px;vertical-align:-3px"')}Ajouter</button><span class="small muted" id="fPhN">${(pre.imgs || []).length ? (pre.imgs.length + ' photo(s)') : 'aucune'}</span></div><input type="file" id="fFile" accept="image/*" multiple hidden>
+      <div class="acts"><button class="btn p" id="fGo">Créer la fiche</button><button class="btn" id="fX">Annuler</button></div>`;
+    s.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { pre.topic = $('#fTopic').value; subj = b.dataset.s; pre.subject = subj; paint(); });
+    s.querySelectorAll('#fSugg [data-t]').forEach(b => b.onclick = () => { $('#fTopic').value = b.dataset.t; });
+    $('#fPh').onclick = () => $('#fFile').click();
+    $('#fFile').onchange = async e => { pre.imgs = pre.imgs || []; for (const f of [...e.target.files].slice(0, 4)) pre.imgs.push({ mime: 'image/jpeg', data: await shrinkImg(f) }); $('#fPhN').textContent = pre.imgs.length + ' photo(s)'; };
+    $('#fX').onclick = closeSheet;
+    $('#fGo').onclick = () => { const topic = $('#fTopic').value.trim(); if (!topic && !subj && !(pre.imgs || []).length) return toast('Il manque le sujet', 'Écris de quoi parle la fiche'); closeSheet(); makeFiche({ subject: subj, topic, imgs: pre.imgs }); };
+  };
+  paint(); openSheet();
+}
+async function makeFiche({ subject, topic, imgs = [], extra: more }) {
+  toast('Fiche en préparation', 'Ça prend 10 à 30 secondes');
+  const ov = showOverlay(`<div class="fLoad">${AI_AV}<b>Je prépare ta fiche…</b><span>${esc([subject, topic].filter(Boolean).join(' · ') || 'à partir de tes photos')}</span><div class="skel" style="width:100%">${'<i style="height:60px"></i>'.repeat(4)}</div></div>`);
+  try {
+    const text = await studyCall({ mode: 'fiche', prompt: `Fiche de révision${subject ? ' de ' + subject : ''}${topic ? ' : ' + topic : ''}.${more ? '\nBase-toi aussi sur cette explication :\n' + more.slice(0, 6000) : ''}${imgs.length ? '\nLes photos jointes sont le cours de l\'élève : appuie-toi dessus en priorité.' : ''}`, images: imgs, context: studyCtx(subject) });
+    const f = parseJSON(text); if (!f || !f.title) throw new Error('fiche illisible');
+    f.id = 'f' + Date.now().toString(36); f.subject = subject || f.subject || ''; f.createdAt = new Date().toISOString(); f.topic = topic || '';
+    fiches = [f, ...fiches].slice(0, 80); store.set('orbit.fiches', fiches); extra('fiche_save', { fiche: f }).catch(() => { });
+    ov.remove(); openFiche(f.id); if ($('#stList') && !tutor.length) paintStudy(false);
+  } catch (e) { ov.remove(); toast('Fiche ratée', e.code === 'rate_limited' ? 'Trop de demandes, réessaie dans une minute' : 'Réessaie, ou précise le sujet'); }
+}
+function showOverlay(html) { const o = document.createElement('div'); o.className = 'ficheO'; o.innerHTML = `<div class="fBg2"></div><div class="fWrap">${html}</div>`; document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('on')); return o; }
+function ficheHTML(f) {
+  const L = (arr, cls = '') => (arr || []).filter(Boolean).map(x => `<li class="${cls}">${mdInline(x)}</li>`).join('');
+  return `<div class="fTop">${subjBadge(f.subject || f.title)}<div class="nTx"><small>${esc(f.subject || 'Fiche')} · ${new Date(f.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</small><h2>${esc(f.title)}</h2></div><button class="iconbtn" id="fxClose" aria-label="Fermer">${SVG('<path d="M6 6l12 12M18 6L6 18"/>')}</button></div>
+    ${f.resume ? `<p class="fRes">${mdInline(f.resume)}</p>` : ''}
+    ${f.retenir?.length ? `<div class="fiBox fKey"><h4>À retenir</h4><ul>${L(f.retenir)}</ul></div>` : ''}
+    ${(f.sections || []).map(x => `<div class="fSec"><h3>${esc(x.titre || '')}</h3><ul>${L(x.points)}</ul></div>`).join('')}
+    ${f.definitions?.length ? `<div class="fSec"><h3>Définitions</h3><div class="fDefs">${f.definitions.map(d => `<div><b>${esc(d.terme)}</b><span>${mdInline(d.def)}</span></div>`).join('')}</div></div>` : ''}
+    ${f.formules?.length ? `<div class="fSec"><h3>Formules</h3>${f.formules.map(x => `<div class="fForm"><small>${esc(x.nom || '')}</small><span class="tex disp" data-tex="${encodeURIComponent(x.latex || '')}">${esc(x.latex || '')}</span>${x.explication ? `<p>${mdInline(x.explication)}</p>` : ''}</div>`).join('')}</div>` : ''}
+    ${f.schema ? `<div class="fSec"><h3>Schéma</h3><div class="mmd" data-src="${encodeURIComponent(String(f.schema).replace(/^```mermaid\s*|```$/g, ''))}"><div class="mmdLoad">Schéma en cours…</div></div></div>` : ''}
+    ${f.exemples?.length ? `<div class="fSec"><h3>Exemples</h3><ul>${L(f.exemples)}</ul></div>` : ''}
+    ${f.pieges?.length ? `<div class="fiBox fTrap"><h4>Pièges à éviter</h4><ul>${L(f.pieges)}</ul></div>` : ''}
+    <div class="fActs"><button class="btn p ic" id="fxQuiz">${ICON.ia}M'interroger${f.score != null ? ' (' + f.score + '/8)' : ''}</button><button class="btn" id="fxAsk">Poser une question</button><button class="btn" id="fxDel">Supprimer</button></div>`;
+}
+const mdInline = x => mdBlock(String(x || '')).replace(/^<p>|<\/p>$/g, '');
+function openFiche(id) {
+  const f = fiches.find(x => x.id === id); if (!f) return;
+  const o = showOverlay(ficheHTML(f)); enhance(o);
+  const close = () => { o.classList.remove('on'); setTimeout(() => o.remove(), 300); };
+  o.querySelector('#fxClose').onclick = close;
+  o.querySelector('.fBg2').onclick = close;
+  o.querySelector('#fxQuiz').onclick = () => { close(); runQuiz({ fiche: f }); };
+  o.querySelector('#fxAsk').onclick = () => { close(); iaMode = 'reviser'; store.set('orbit.iaMode', iaMode); go('ia'); rAI(true); const i = $('#stIn'); if (i) { i.value = `Sur ma fiche « ${f.title} » : `; i.focus(); } };
+  o.querySelector('#fxDel').onclick = () => { if (!confirmDel(o.querySelector('#fxDel'))) return; fiches = fiches.filter(x => x.id !== id); store.set('orbit.fiches', fiches); extra('fiche_del', { id }).catch(() => { }); close(); if ($('#stList')) paintStudy(false); toast('Fiche supprimée', f.title); };
+}
+function confirmDel(btn) { if (btn.dataset.sure) return true; btn.dataset.sure = '1'; btn.textContent = 'Confirmer ?'; btn.classList.add('danger'); setTimeout(() => { delete btn.dataset.sure; btn.textContent = 'Supprimer'; btn.classList.remove('danger'); }, 3000); return false; }
+function fichesSheet() {
+  const s = $('#sheet'), by = new Map(); for (const f of fiches) { const k = f.subject || 'Autres'; if (!by.has(k)) by.set(k, []); by.get(k).push(f); }
+  s.innerHTML = `<div class="grab"></div><h2>Mes fiches</h2>${fiches.length ? [...by.entries()].map(([k, L]) => `<label class="l">${esc(k)}</label><div class="list">${L.map(f => `<button class="fRow" data-fiche="${f.id}">${subjBadge(f.subject || f.title, 'sq')}<span><b>${esc(f.title)}</b><small>${new Date(f.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}${f.score != null ? ' · quiz ' + f.score + '/8' : ''}</small></span></button>`).join('')}</div>`).join('') : '<p class="small muted" style="margin-top:10px">Pas encore de fiche.</p>'}
+    <div class="acts"><button class="btn p" id="fsNew">Nouvelle fiche</button><button class="btn" id="fsX">Fermer</button></div>`;
+  openSheet(); $('#fsX').onclick = closeSheet; $('#fsNew').onclick = () => ficheSheet();
+  s.querySelectorAll('[data-fiche]').forEach(b => b.onclick = () => { closeSheet(); openFiche(b.dataset.fiche); });
+}
+function quizSheet() {
+  const subs = subjectChoices(); let subj = null;
+  const s = $('#sheet');
+  const paint = () => {
+    s.innerHTML = `<div class="grab"></div><h2>M'interroger</h2><p class="small muted" style="margin-top:4px">8 questions, de plus en plus dures, avec la correction expliquée.</p>
+      ${fiches.length ? `<label class="l">Sur une de mes fiches</label><div class="chipsRow">${fiches.slice(0, 8).map(f => `<span data-qf="${f.id}">${subjBadge(f.subject || f.title, 'sq mini')}${esc(f.title.slice(0, 40))}</span>`).join('')}</div>` : ''}
+      <label class="l">Ou sur une matière</label><div class="chipsRow">${subs.map(n => `<span class="${subj === n ? 'on' : ''}" data-s="${esc(n)}">${subjBadge(n, 'sq mini')}${esc(n)}</span>`).join('')}</div>
+      <label class="l" for="qTopic">Sujet précis (facultatif)</label><input class="inp" id="qTopic" placeholder="ex : les fonctions du second degré">
+      <div class="acts"><button class="btn p" id="qGo">C'est parti</button><button class="btn" id="qX">Annuler</button></div>`;
+    s.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { subj = b.dataset.s; paint(); });
+    s.querySelectorAll('[data-qf]').forEach(b => b.onclick = () => { closeSheet(); runQuiz({ fiche: fiches.find(f => f.id === b.dataset.qf) }); });
+    $('#qX').onclick = closeSheet;
+    $('#qGo').onclick = () => { const t = $('#qTopic').value.trim(); if (!subj && !t) return toast('Choisis une matière', 'ou écris un sujet'); closeSheet(); runQuiz({ subject: subj, topic: t }); };
+  };
+  paint(); openSheet();
+}
+async function runQuiz({ fiche, subject, topic }) {
+  const ov = showOverlay(`<div class="fLoad">${AI_AV}<b>Je prépare ton quiz…</b><span>${esc(fiche ? fiche.title : [subject, topic].filter(Boolean).join(' · '))}</span><div class="skel" style="width:100%">${'<i style="height:54px"></i>'.repeat(4)}</div></div>`);
+  let qs;
+  try {
+    const ctx = fiche ? 'FICHE : ' + JSON.stringify({ title: fiche.title, sections: fiche.sections, definitions: fiche.definitions, formules: fiche.formules, retenir: fiche.retenir, pieges: fiche.pieges }).slice(0, 9000) : studyCtx(subject);
+    const text = await studyCall({ mode: 'quiz', prompt: `Quiz sur ${fiche ? 'la fiche « ' + fiche.title + ' »' : [subject, topic].filter(Boolean).join(' : ')}.`, context: ctx });
+    qs = (parseJSON(text)?.questions || []).filter(q => q.q && Array.isArray(q.choix) && q.choix.length >= 2 && q.bonne >= 0 && q.bonne < q.choix.length).slice(0, 10);
+    if (!qs.length) throw new Error('quiz vide');
+  } catch (e) { ov.remove(); return toast('Quiz raté', e.code === 'rate_limited' ? 'Trop de demandes, réessaie dans une minute' : 'Réessaie dans un instant'); }
+  let i = 0, score = 0, answered = false;
+  const wrap = ov.querySelector('.fWrap');
+  const close = () => { ov.classList.remove('on'); setTimeout(() => ov.remove(), 300); };
+  const paint = () => {
+    if (i >= qs.length) {
+      const pct = score / qs.length;
+      if (fiche) { fiche.score = score; store.set('orbit.fiches', fiches); extra('fiche_save', { fiche }).catch(() => { }); }
+      wrap.innerHTML = `<div class="qEnd"><div class="qScore ${pct >= .75 ? 'g4' : pct >= .5 ? 'g2' : 'g0'}">${score}<span>/${qs.length}</span></div><h2>${pct >= .875 ? 'Excellent !' : pct >= .625 ? 'Bien joué' : pct >= .375 ? 'Pas mal, encore un effort' : 'À retravailler'}</h2><p class="small muted">${pct >= .75 ? 'Tu maîtrises le sujet.' : 'Relis la fiche puis refais le quiz demain : c\'est la répétition qui fait retenir.'}</p>
+        <div class="fActs"><button class="btn p" id="qAgain">Nouveau quiz</button>${fiche ? '<button class="btn" id="qFiche">Revoir la fiche</button>' : ''}<button class="btn" id="qClose">Fermer</button></div></div>`;
+      wrap.querySelector('#qAgain').onclick = () => { close(); runQuiz({ fiche, subject, topic }); };
+      const qf = wrap.querySelector('#qFiche'); if (qf) qf.onclick = () => { close(); openFiche(fiche.id); };
+      wrap.querySelector('#qClose').onclick = close;
+      if (pct >= .75) chime();
+      return;
+    }
+    const q = qs[i]; answered = false;
+    wrap.innerHTML = `<div class="qTop"><span>Question ${i + 1}/${qs.length}</span><div class="qBar"><i style="width:${i / qs.length * 100}%"></i></div><button class="iconbtn" id="qX" aria-label="Fermer">${SVG('<path d="M6 6l12 12M18 6L6 18"/>')}</button></div>
+      <h2 class="qQ">${mdInline(q.q)}</h2><div class="qChoices">${q.choix.map((c, k) => `<button data-k="${k}"><i>${'ABCD'[k] || k + 1}</i><span>${mdInline(c)}</span></button>`).join('')}</div><div class="qExp" id="qExp"></div>`;
+    enhance(wrap);
+    wrap.querySelector('#qX').onclick = close;
+    wrap.querySelectorAll('.qChoices button').forEach(b => b.onclick = () => {
+      if (answered) return; answered = true; const k = +b.dataset.k, ok = k === q.bonne; if (ok) score++;
+      wrap.querySelectorAll('.qChoices button').forEach(x => { const kk = +x.dataset.k; x.classList.add(kk === q.bonne ? 'good' : kk === k ? 'bad' : 'dim'); });
+      try { navigator.vibrate?.(ok ? 20 : [40, 40, 40]); } catch { }
+      const ex = wrap.querySelector('#qExp'); ex.innerHTML = `<b class="${ok ? 'g4' : 'g0'}">${ok ? 'Bonne réponse' : 'Raté'}</b>${q.explication ? `<p>${mdInline(q.explication)}</p>` : ''}<button class="btn p" id="qNext">${i + 1 < qs.length ? 'Question suivante' : 'Voir mon score'}</button>`;
+      enhance(ex); ex.classList.add('on'); ex.querySelector('#qNext').onclick = () => { i++; paint(); };
+    });
+  };
+  paint();
+}
 async function ask(q) {
   if (asking || !q) return; asking = true;
   chat.push({ role: 'user', content: q }); saveChat();
@@ -1260,6 +1517,7 @@ function boot() {
   setInterval(() => pull(), 60e3);
   loadNotes(); setInterval(loadNotes, 10 * 60e3);
   loadContenus(); setInterval(loadContenus, 15 * 60e3);
+  loadFiches();
   if (focus) showFocus();
   setInterval(checkReminders, 30e3); setTimeout(checkReminders, 4000);
   setInterval(() => { if (current === 'aujourdhui' && document.visibilityState === 'visible') updateNow(); }, 20e3);

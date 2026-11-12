@@ -27,6 +27,17 @@ Deno.serve(async (req) => {
       const { data } = await db.from("orbit_kv").select("value, updated_at").eq("key", cfg.id === 1 ? "contenus" : `u${cfg.id}:contenus`).maybeSingle();
       return json({ ok: true, contenus: data?.value ?? [], at: data?.updated_at ?? null });
     }
+    if (b.action === "study") return json(await study(cfg, b));
+    if (b.action === "fiches" || b.action === "fiche_save" || b.action === "fiche_del") {
+      const key = cfg.id === 1 ? "fiches" : `u${cfg.id}:fiches`;
+      const { data } = await db.from("orbit_kv").select("value").eq("key", key).maybeSingle();
+      let list: any[] = Array.isArray(data?.value) ? data!.value : [];
+      if (b.action === "fiches") return json({ ok: true, fiches: list });
+      if (b.action === "fiche_save" && b.fiche?.id) { list = [b.fiche, ...list.filter((f) => f.id !== b.fiche.id)].slice(0, 80); }
+      if (b.action === "fiche_del") list = list.filter((f) => f.id !== b.id);
+      await db.from("orbit_kv").upsert({ key, value: list, updated_at: new Date().toISOString() });
+      return json({ ok: true });
+    }
     if (b.action === "transcribe") return json(await transcribe(cfg, b));
     return json({ error: "action inconnue" }, 400);
   } catch (e) {
@@ -59,6 +70,69 @@ async function transcribe(cfg: any, b: any) {
       const j = await r.json().catch(() => ({}));
       if (r.ok) return { ok: true, text: (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim() };
       err = "Gemini " + (j.error?.message ?? r.status);
+    }
+  }
+  return { ok: false, error: err || "no_key" };
+}
+
+/* ---------- Prof IA : explications, aide aux devoirs, fiches, quiz ---------- */
+const TUTOR = `Tu es un excellent professeur particulier pour un lycéen français. Tu tutoies, tu es clair, bienveillant et précis.
+Règles :
+- Explique simplement, étape par étape, avec un exemple concret. Vérifie tes calculs.
+- Aide aux devoirs : par défaut, GUIDE (méthode, indice, première étape, vérifie sa réponse) au lieu de donner directement la réponse finale. Donne la correction complète seulement s'il la demande clairement.
+- Mise en forme Markdown pour téléphone : titres courts avec ###, listes à tirets, **gras** pour l'essentiel, tableaux simples si utile.
+- Formules : en LaTeX entre $...$ (en ligne) ou $$...$$ (bloc). Ex : $\\Delta = b^2 - 4ac$.
+- Schémas : quand un dessin aide (étapes, chronologie, carte mentale, circuit logique, cycle, classification), ajoute un bloc \`\`\`mermaid valide (flowchart LR/TD, mindmap, timeline ou sequenceDiagram), court (8 à 14 nœuds), textes entre guillemets, sans parenthèses ni caractères spéciaux dans les noms de nœuds.
+- Termine souvent par une petite question pour vérifier qu'il a compris.
+- Si tu n'es pas sûr d'un fait, dis-le. Pas de blabla.`;
+const FICHE = `${TUTOR}
+Tu fais une FICHE DE RÉVISION complète, fiable et synthétique (niveau lycée). Réponds UNIQUEMENT en JSON :
+{"title":"titre","subject":"matière","resume":"2-3 phrases","sections":[{"titre":"…","points":["…"]}],"definitions":[{"terme":"…","def":"…"}],"formules":[{"nom":"…","latex":"formule LaTeX sans $","explication":"…"}],"schema":"code mermaid (carte mentale ou schéma) ou chaîne vide","exemples":["exemple corrigé court"],"pieges":["erreur fréquente"],"retenir":["les 3-5 choses à savoir par cœur"]}
+3 à 5 sections, 3 à 6 points chacune. Vérifie chaque affirmation et chaque formule : n'écris rien dont tu n'es pas sûr. formules vide si la matière n'en a pas. Le texte des points peut contenir **gras** et $LaTeX$.`;
+const QUIZ = `${TUTOR}
+Fais un QUIZ de révision de 8 questions à choix multiples, de difficulté progressive, sur le sujet donné. Réponds UNIQUEMENT en JSON :
+{"questions":[{"q":"question","choix":["A","B","C","D"],"bonne":0,"explication":"pourquoi, en 1-2 phrases"}]}
+"bonne" = index (0-3) de la bonne réponse. Une seule bonne réponse, des pièges plausibles. Tu peux utiliser $LaTeX$.
+AVANT de répondre, vérifie chaque question : la bonne réponse doit être certaine et conforme au programme du lycée. Si tu as le moindre doute sur une question, remplace-la par une autre plus sûre.`;
+
+async function study(cfg: any, b: any) {
+  const mode = ["fiche", "quiz"].includes(b.mode) ? b.mode : "chat";
+  const system = (mode === "fiche" ? FICHE : mode === "quiz" ? QUIZ : TUTOR) + (b.context ? "\n\nCONTEXTE (cours de l'élève, cahier de textes, notes) :\n" + String(b.context).slice(0, 12000) : "");
+  const messages = (b.messages ?? []).slice(-14).map((m: any) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content).slice(0, 12000) }));
+  if (!messages.length) messages.push({ role: "user", content: String(b.prompt ?? "").slice(0, 12000) });
+  const images = (b.images ?? []).filter((i: any) => i?.data && i?.mime).slice(0, 4);
+  const json = mode !== "chat";
+  let err = "";
+  // Photo → Gemini (vision). Sinon Groq gpt-oss-120b avec raisonnement, Gemini en secours.
+  if (!images.length && cfg.groq_key) {
+    for (const model of ["openai/gpt-oss-120b", "moonshotai/kimi-k2-instruct", "llama-3.3-70b-versatile"]) {
+      try {
+        const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.groq_key}` },
+          body: JSON.stringify({ model, messages: [{ role: "system", content: system }, ...messages], temperature: json ? 0.3 : 0.5, max_completion_tokens: 5000,
+            ...(model.includes("gpt-oss") ? { reasoning_effort: "medium" } : {}), ...(json ? { response_format: { type: "json_object" } } : {}) }),
+          signal: AbortSignal.timeout(json ? 85000 : 55000),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok) { const text = j.choices?.[0]?.message?.content ?? ""; if (text.trim()) return { ok: true, text, model }; }
+        err = j.error?.message ?? `Groq ${r.status}`;
+        if (r.status === 401) break;
+      } catch { err = "Groq met trop de temps"; }
+    }
+  }
+  if (cfg.gemini_key) {
+    const contents = messages.map((m: any, i: number) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }, ...(i === messages.length - 1 ? images.map((im: any) => ({ inline_data: { mime_type: im.mime, data: im.data } })) : [])] }));
+    for (const model of ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gemini_key },
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { temperature: json ? 0.3 : 0.5, ...(json ? { responseMimeType: "application/json" } : {}) } }),
+          signal: AbortSignal.timeout(50000),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok) return { ok: true, text: (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join(""), model };
+        err = "Gemini " + (j.error?.message ?? r.status);
+      } catch { err = "Gemini met trop de temps"; }
     }
   }
   return { ok: false, error: err || "no_key" };
