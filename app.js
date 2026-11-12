@@ -329,6 +329,7 @@ Le message peut être :
 - une demande d'être INTERROGÉ ou de QUIZ (ex : « interroge-moi sur l'allemand », « quiz sur la Boétie ») → intent "quiz" avec "study":{"subject":"matière ou null","topic":"sujet ou null"} ;
 - une demande de MODIFIER, DÉCALER ou SUPPRIMER (ex : « décale tout à demain », « mets le dentiste à 17h », « supprime le rappel poubelles », « renomme X ») → intent "edit" : "edits" liste les changements [{"id":"…","due":"YYYY-MM-DD","time":"HH:MM"|null,"title":"…"}] (ne mets que les champs qui changent ; "time":null enlève l'heure) et "remove" les id à supprimer. « tout » = toutes les tâches concernées de la liste ci-dessous. Les devoirs Pronote (id qui commence par pn:) et les révisions (rv:) ne peuvent être ni décalés ni supprimés : dis-le dans "reply" et propose de les marquer faits.
 Pour "chat", "reply" est une VRAIE réponse complète et utile, pas une phrase d'introduction : par exemple pour « organise ma semaine », donne le plan jour par jour (lundi, mardi…) en t'appuyant sur ses cours, devoirs, tâches et agenda ci-dessous, avec des créneaux concrets (ex : « 17h30-18h15 : exo de maths ») et les priorités. Mets en forme pour un téléphone : phrases courtes, un petit titre par jour ou par partie (ex : « Lundi : » seul sur sa ligne), des tirets « - » pour les listes, **gras** pour l'essentiel (matière, priorité), horaires au format 17h30-18h15. Pas de tableau, pas de #. Pour "add", "done" et "edit", "reply" est une phrase courte qui dit ce que tu as fait.
+Style de "reply" : commence directement par l'info ou le plan, sans phrase d'intro (« Voici… », « Bien sûr ! », « Super question »). Pas de formule de fin (« N'hésite pas… », « Bon courage ! », « En résumé »), pas d'emoji, pas de tournure « ce n'est pas X, c'est Y », pas de listes de trois adjectifs. Donne des faits vérifiables : heure, matière, durée estimée, date. Une question de relance au maximum, seulement si elle est utile.
 Dates : une date sans année = la PROCHAINE occurrence. « avant le X » = date limite X. Répétition : daily, weekdays, weekly, biweekly, monthly ou null.
 Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done"|"edit"|"cours"|"fiche"|"quiz","reply":"ta réponse","study":null,"tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"],"edits":[],"remove":[]}`;
 function taskFrom(x, source) {
@@ -802,7 +803,7 @@ async function toggleVoice(btn, input) {
       const r = await extra('transcribe', { audio: b64, mime: blob.type });
       if (r.ok && r.text) { input.value = (input.value ? input.value.trim() + ' ' : '') + r.text; input.dispatchEvent(new Event('input')); input.focus(); }
       else toast('Pas compris', r.error === 'no_key' ? 'Ajoute la clé Groq dans Réglages' : 'Réessaie en parlant plus près');
-    } catch { toast('Oups', 'La dictée n\'a pas marché'); }
+    } catch { toast('Dictée impossible', 'Réessaie dans un instant'); }
     btn.classList.remove('busy');
   };
   rec.start(); btn.classList.add('rec'); try { navigator.vibrate?.(30); } catch { }
@@ -964,7 +965,7 @@ const IA_ACTIONS = [['soir', 'Ma soirée', 'quoi faire ce soir'], ['semaine', 'M
 function helloHTML() {
   const name = server.me?.name && server.me.name !== 'Invité' ? server.me.name : '';
   const fs = fiches.slice(0, 8);
-  return `<div class="chatHello">${AI_AV}<h3>Salut${name ? ' ' + esc(name) : ''} 👋</h3><p>Je m'occupe de ton <b>organisation</b> (ajouter, décaler, planifier) et de tes <b>révisions</b> (explications avec schémas, aide sur un exercice en photo, fiches, quiz). Je connais tes cours, devoirs, notes et ton cahier de textes.</p>
+  return `<div class="chatHello">${AI_AV}<h3>Salut${name ? ' ' + esc(name) : ''} 👋</h3><p>Écris une tâche à ajouter, une question sur ta semaine, une notion à comprendre, ou envoie un exercice en photo. Je m'appuie sur ton emploi du temps, tes devoirs, tes notes et ton cahier de textes.</p>
     <div class="stGrid">${IA_ACTIONS.map(([k, t, d]) => `<button data-st="${k}"><b>${t}</b><span>${d}</span></button>`).join('')}</div>
     ${fs.length ? `<div class="dayHead" style="margin-top:6px"><b>Mes fiches</b><span class="n">${fiches.length}</span></div><div class="fStrip">${fs.map(f => `<button class="fChip" data-fiche="${f.id}">${subjBadge(f.subject || f.title, 'sq mini')}<span><b>${esc(f.title)}</b><small>${esc(f.subject || '')}${f.score != null ? ' · quiz ' + f.score + '/8' : ''}</small></span></button>`).join('')}</div>` : ''}</div>`;
 }
@@ -1113,7 +1114,7 @@ function ficheSheet(pre = {}) {
   const s = $('#sheet');
   const sugg = () => { const C = contenus.filter(x => subj && prettySubj(x.subject) === subj).slice(0, 4); return C.length ? `<label class="l">D'après tes derniers cours</label><div class="chipsRow">${C.map(x => { const t = (x.items[0].title || x.items[0].text).split('\n')[0].slice(0, 60); return `<span data-t="${esc(t)}">${esc(t)}</span>`; }).join('')}</div>` : ''; };
   const paint = () => {
-    s.innerHTML = `<div class="grab"></div><h2>Nouvelle fiche</h2><p class="small muted" style="margin-top:4px">L'IA fait une synthèse fiable avec définitions, formules, schéma et pièges à éviter.</p>
+    s.innerHTML = `<div class="grab"></div><h2>Nouvelle fiche</h2><p class="small muted" style="margin-top:4px">L'IA résume le sujet avec définitions, formules, schéma et erreurs fréquentes. Vérifie-la avec ton cours.</p>
       <label class="l">Matière</label><div class="chipsRow">${subs.map(n => `<span class="${subj === n ? 'on' : ''}" data-s="${esc(n)}">${subjBadge(n, 'sq mini')}${esc(n)}</span>`).join('')}</div>
       <label class="l" for="fTopic">Sujet</label><input class="inp" id="fTopic" placeholder="ex : forme canonique, prétérit, la Boétie…" value="${esc(pre.topic || '')}">
       <div id="fSugg">${sugg()}</div>
@@ -1204,7 +1205,7 @@ async function runQuiz({ fiche, subject, topic }) {
     if (i >= qs.length) {
       const pct = score / qs.length;
       if (fiche) { fiche.score = score; store.set('orbit.fiches', fiches); extra('fiche_save', { fiche }).catch(() => { }); }
-      wrap.innerHTML = `<div class="qEnd"><div class="qScore ${pct >= .75 ? 'g4' : pct >= .5 ? 'g2' : 'g0'}">${score}<span>/${qs.length}</span></div><h2>${pct >= .875 ? 'Excellent !' : pct >= .625 ? 'Bien joué' : pct >= .375 ? 'Pas mal, encore un effort' : 'À retravailler'}</h2><p class="small muted">${pct >= .75 ? 'Tu maîtrises le sujet.' : 'Relis la fiche puis refais le quiz demain : c\'est la répétition qui fait retenir.'}</p>
+      wrap.innerHTML = `<div class="qEnd"><div class="qScore ${pct >= .75 ? 'g4' : pct >= .5 ? 'g2' : 'g0'}">${score}<span>/${qs.length}</span></div><h2>${pct >= .875 ? 'Excellent !' : pct >= .625 ? 'Bien joué' : pct >= .375 ? 'Pas mal, encore un effort' : 'À retravailler'}</h2><p class="small muted">${pct >= .75 ? `${score} bonnes réponses sur ${qs.length}.` : `${score} bonnes réponses sur ${qs.length}. Relis la fiche, puis refais le quiz demain.`}</p>
         <div class="fActs"><button class="btn p" id="qAgain">Nouveau quiz</button>${fiche ? '<button class="btn" id="qFiche">Revoir la fiche</button>' : ''}<button class="btn" id="qClose">Fermer</button></div></div>`;
       wrap.querySelector('#qAgain').onclick = () => { close(); runQuiz({ fiche, subject, topic }); };
       const qf = wrap.querySelector('#qFiche'); if (qf) qf.onclick = () => { close(); openFiche(fiche.id); };
@@ -1340,7 +1341,7 @@ function openSettings() {
   <div class="inline"><input class="inp" id="sName" placeholder="${esc(server.me?.name || 'Prénom')}" autocomplete="off"><button class="btn" id="sNameGo">Enregistrer</button></div>
 
   ${server.me?.sharedAI ? `<label class="l">Assistant IA</label><div class="status"><span class="dot on"></span>Activé (clés partagées par Celyan)</div><div hidden>` : ''}
-  <label class="l" for="sGroq">Assistant IA · Groq (gratuit, rapide — recommandé)</label>
+  <label class="l" for="sGroq">Assistant IA · Groq (gratuit et rapide, recommandé)</label>
   <div class="status"><span class="dot ${f.groq ? 'on' : ''}"></span>${f.groq ? 'Clé enregistrée' : 'Pas de clé'}</div>
   <div class="inline"><input class="inp" id="sGroq" placeholder="${f.groq ? 'Coller une nouvelle clé pour la remplacer' : 'Colle ta clé Groq (gsk_…)'}" autocomplete="off" spellcheck="false"><button class="btn" id="sGroqGo">Enregistrer</button></div>
   <div class="help">Crée ta clé gratuite : <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> → connecte-toi avec Google → <b>« Create API Key »</b> → copie la clé (gsk_…).</div>
@@ -1372,8 +1373,8 @@ function openSettings() {
   $('#sD').onclick = async () => { try { const r = await api('test_discord'); toast('Discord', r.ok ? 'Message de test envoyé, regarde tes MP.' : 'Le bot n\'a pas pu t\'écrire.'); } catch (e) { toast('Discord', 'Serveur injoignable.'); } };
   const secret = async (field, val, btn, ok) => {
     if (!val.trim()) return; btn.disabled = true; btn.textContent = '…';
-    try { const r = await api('set_secret', { [field]: val.trim() }); if (r.ok) { toast(ok, 'C\'est bon !'); await pull(false, true); openSettings(); } else toast('Oups', r.error || 'Refusé'); }
-    catch (e) { toast('Oups', 'Serveur injoignable.'); }
+    try { const r = await api('set_secret', { [field]: val.trim() }); if (r.ok) { toast(ok, 'Enregistré'); await pull(false, true); openSettings(); } else toast('Refusé', r.error || 'Vérifie ce que tu as collé'); }
+    catch (e) { toast('Serveur injoignable', 'Réessaie dans un instant'); }
     btn.disabled = false; btn.textContent = 'Enregistrer';
   };
   $('#sAIgo').onclick = e => secret('gemini_key', $('#sAI').value.replace(/\s+/g, ''), e.target, 'Gemini activé');
