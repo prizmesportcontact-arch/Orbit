@@ -228,7 +228,7 @@ async function pull(full = false, forceCal = false) {
       if (t.deleted) { if (i >= 0) tasks.splice(i, 1); } else if (i >= 0) tasks[i] = t; else tasks.push(t);
     }
     if (r.settings && !outbox.settings) { settings = Object.assign(settings, r.settings); applyAccent(); }
-    server = { devoirs: r.devoirs, cours: r.cours, gcal: r.gcal, gcalAt: r.gcalAt, gcalError: r.gcalError, pronote: r.pronote, flags: r.flags };
+    server = { devoirs: r.devoirs, cours: r.cours, gcal: r.gcal, gcalAt: r.gcalAt, gcalError: r.gcalError, pronote: r.pronote, flags: r.flags, me: r.me };
     lastSince = r.now; store.set('orbit.since', lastSince); synced = true;
     persist(); render(); scheduleRappels();
   } catch (e) {
@@ -884,7 +884,7 @@ function msgHTML(m, i) {
 function paintChat(stick = true) {
   const L = $('#chatList'); if (!L) return;
   const atBottom = L.scrollHeight - L.scrollTop - L.clientHeight < 80;
-  L.innerHTML = (chat.length ? '' : `<div class="chatHello">${AI_AV}<h3>Salut Celyan 👋</h3><p>Écris-moi comme tu veux : « exposé à rendre vendredi » pour <b>ajouter</b> un truc, ou « qu'est-ce que je fais ce soir ? » pour un <b>conseil</b>. Je connais tes cours, devoirs et rappels.</p></div>`)
+  L.innerHTML = (chat.length ? '' : `<div class="chatHello">${AI_AV}<h3>Salut${server.me?.name && server.me.name !== 'Invité' ? ' ' : ''}${esc(server.me?.name && server.me.name !== 'Invité' ? server.me.name : '')} 👋</h3><p>Écris-moi comme tu veux : « exposé à rendre vendredi » pour <b>ajouter</b> un truc, ou « qu'est-ce que je fais ce soir ? » pour un <b>conseil</b>. Je connais tes cours, devoirs et rappels.</p></div>`)
     + chat.map(msgHTML).join('')
     + (asking ? `<div class="msgRow">${AI_AV}<div class="msg a think"><i></i><i></i><i></i></div></div>` : '');
   $('#iaSugg').hidden = chat.length > 0 || asking;
@@ -1023,7 +1023,13 @@ function openSettings() {
 
   <label class="l">Rappels Discord</label>
   <div class="opt"><div><b>Message privé avec ping</b><p>Le bot t'envoie chaque rappel (tâches et devoirs Pronote) en MP, même quand Orbit est fermé.</p></div><button class="btn sm" id="sD">Tester</button></div>
+  <div class="status"><span class="dot ${f.discord ? 'on' : ''}"></span>${f.discord ? 'ID Discord enregistré' : 'Pas encore d\'ID Discord'}</div>
+  <div class="inline"><input class="inp" id="sDid" inputmode="numeric" placeholder="${f.discord ? 'Nouvel ID pour le remplacer' : 'Ton ID Discord (17 à 20 chiffres)'}" autocomplete="off"><button class="btn" id="sDidGo">Enregistrer</button></div>
+  <div class="help">Discord → Paramètres → Avancés → active le <b>Mode développeur</b>, puis appuie sur ta photo de profil → <b>« Copier l'identifiant »</b>. Tu dois être sur un serveur où se trouve le bot Orbit pour qu'il puisse t'écrire.</div>
+  <label class="l" for="sName">Ton prénom</label>
+  <div class="inline"><input class="inp" id="sName" placeholder="${esc(server.me?.name || 'Prénom')}" autocomplete="off"><button class="btn" id="sNameGo">Enregistrer</button></div>
 
+  ${server.me?.sharedAI ? `<label class="l">Assistant IA</label><div class="status"><span class="dot on"></span>Activé (clés partagées par Celyan)</div><div hidden>` : ''}
   <label class="l" for="sGroq">Assistant IA · Groq (gratuit, rapide — recommandé)</label>
   <div class="status"><span class="dot ${f.groq ? 'on' : ''}"></span>${f.groq ? 'Clé enregistrée' : 'Pas de clé'}</div>
   <div class="inline"><input class="inp" id="sGroq" placeholder="${f.groq ? 'Coller une nouvelle clé pour la remplacer' : 'Colle ta clé Groq (gsk_…)'}" autocomplete="off" spellcheck="false"><button class="btn" id="sGroqGo">Enregistrer</button></div>
@@ -1034,6 +1040,7 @@ function openSettings() {
   <div class="inline"><input class="inp" id="sAI" placeholder="${f.ai ? 'Coller une nouvelle clé pour la remplacer' : 'Colle ta clé Gemini (AQ.…)'}" autocomplete="off" spellcheck="false"><button class="btn" id="sAIgo">Enregistrer</button></div>
   <div class="help">Crée ta clé gratuite : <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <b>« Create API key »</b> → copie la clé en entier (elle commence par <b>AQ.</b> ou AIza).</div>
 
+  ${server.me?.sharedAI ? '</div>' : ''}
   <label class="l" for="sCal">Google Agenda</label>
   <div class="status"><span class="dot ${f.ical ? 'on' : ''}"></span>${f.ical ? 'Relié' + (server.gcalError ? ' · ⚠️ ' + esc(server.gcalError) : '') : 'Pas relié'}</div>
   <div class="inline"><input class="inp" id="sCal" placeholder="Adresse secrète au format iCal (…/basic.ics)" autocomplete="off" spellcheck="false"><button class="btn" id="sCalGo">Relier</button></div>
@@ -1060,6 +1067,8 @@ function openSettings() {
     btn.disabled = false; btn.textContent = 'Enregistrer';
   };
   $('#sAIgo').onclick = e => secret('gemini_key', $('#sAI').value.replace(/\s+/g, ''), e.target, 'Gemini activé');
+  $('#sDidGo').onclick = e => secret('discord_id', $('#sDid').value.replace(/\D+/g, ''), e.target, 'Discord relié');
+  $('#sNameGo').onclick = e => secret('name', $('#sName').value, e.target, 'Prénom enregistré');
   $('#sGroqGo').onclick = e => secret('groq_key', $('#sGroq').value.replace(/\s+/g, ''), e.target, 'Groq activé');
   $('#sCalGo').onclick = e => secret('ical_url', $('#sCal').value, e.target, 'Google Agenda relié');
   $('#sLink').onclick = async () => { try { await navigator.clipboard.writeText(share); toast('Lien copié', 'Ouvre-le sur ton autre appareil.'); } catch (e) { prompt('Copie ce lien :', share); } };

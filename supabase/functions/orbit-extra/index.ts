@@ -8,12 +8,19 @@ const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: 
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
-  const { data: cfg } = await db.from("orbit_pronote").select("app_key, groq_key, gemini_key").eq("id", 1).single();
-  if (!cfg || !req.headers.get("x-orbit-app") || req.headers.get("x-orbit-app") !== cfg.app_key) return json({ error: "Code d'accès incorrect" }, 401);
+  const appKey = req.headers.get("x-orbit-app");
+  if (!appKey) return json({ error: "Code d'accès incorrect" }, 401);
+  const { data: me } = await db.from("orbit_pronote").select("id, groq_key, gemini_key").eq("app_key", appKey).maybeSingle();
+  if (!me) return json({ error: "Code d'accès incorrect" }, 401);
+  let cfg: any = me;
+  if (me.id !== 1 && (!me.groq_key || !me.gemini_key)) {
+    const { data: o } = await db.from("orbit_pronote").select("groq_key, gemini_key").eq("id", 1).single();
+    cfg = { ...me, groq_key: me.groq_key ?? o?.groq_key, gemini_key: me.gemini_key ?? o?.gemini_key };
+  }
   const b = await req.json().catch(() => ({}));
   try {
     if (b.action === "notes") {
-      const { data } = await db.from("orbit_kv").select("value, updated_at").eq("key", "notes").maybeSingle();
+      const { data } = await db.from("orbit_kv").select("value, updated_at").eq("key", cfg.id === 1 ? "notes" : `u${cfg.id}:notes`).maybeSingle();
       return json({ ok: true, notes: data?.value ?? null, at: data?.updated_at ?? null });
     }
     if (b.action === "transcribe") return json(await transcribe(cfg, b));

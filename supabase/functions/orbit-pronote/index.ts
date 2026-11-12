@@ -35,11 +35,15 @@ function parisWall(d: Date) {
 const parisDay = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(d);
 
 Deno.serve(async (req) => {
-  const { data: row, error } = await db.from("orbit_pronote").select("*").eq("id", 1).single();
-  if (error || !row) return json({ ok: false, error: "config introuvable" }, 500);
-  if (req.headers.get("x-orbit-key") !== row.run_key) return json({ ok: false, error: "non autorisé" }, 401);
-
   const body = await req.json().catch(() => ({}));
+  // Compte concerné (1 = propriétaire). Les identifiants des autres comptes sont préfixés pour ne jamais se mélanger.
+  const uid = Number(body?.uid) || 1;
+  const P = (id: string) => uid === 1 ? id : `u${uid}.${id}`;
+  const KV = (k: string) => uid === 1 ? k : `u${uid}:${k}`;
+  const { data: owner } = await db.from("orbit_pronote").select("run_key").eq("id", 1).single();
+  if (!owner || req.headers.get("x-orbit-key") !== owner.run_key) return json({ ok: false, error: "non autorisé" }, 401);
+  const { data: row, error } = await db.from("orbit_pronote").select("*").eq("id", uid).single();
+  if (error || !row) return json({ ok: false, error: "compte introuvable" }, 404);
   const mode = body?.mode === "setup" ? "setup" : "sync";
 
   // Trace des échanges (sans contenu chiffré) pour comprendre une panne
@@ -61,7 +65,7 @@ Deno.serve(async (req) => {
     if (mode === "setup" || (row.pending_qr && row.pending_pin)) {
       if (!row.pending_qr || !row.pending_pin) throw new Error("QR code ou code PIN manquant");
       deviceUUID = crypto.randomUUID();
-      await db.from("orbit_pronote").update({ qr_url: String(row.pending_qr.url || "") }).eq("id", 1);
+      await db.from("orbit_pronote").update({ qr_url: String(row.pending_qr.url || "") }).eq("id", uid);
       refresh = await pronote.loginQrCode(session, { deviceUUID, pin: String(row.pending_pin), qr: row.pending_qr });
     } else {
       if (!row.token || !row.username || !row.url || !deviceUUID) throw new Error("Pronote pas encore connecté");
@@ -76,7 +80,7 @@ Deno.serve(async (req) => {
       url: refresh.url, username: refresh.username, token: refresh.token, kind: refresh.kind,
       navigator_identifier: refresh.navigatorIdentifier, device_uuid: deviceUUID,
       pending_qr: null, pending_pin: null, updated_at: new Date().toISOString(),
-    }).eq("id", 1);
+    }).eq("id", uid);
 
     const now = new Date();
     const start = new Date(now.getTime() - 864e5), end = new Date(now.getTime() + 28 * 864e5);
@@ -88,9 +92,9 @@ Deno.serve(async (req) => {
     const byId = new Map<string, any>();
     for (const a of list) {
       const subject = a.subject?.name ?? null, description = clean(a.description).slice(0, 2000), due = new Date(a.deadline).toISOString().slice(0, 10);
-      const id = "d" + (await sha(`${subject}|${due}|${description}`)).slice(0, 24);
+      const id = P("d" + (await sha(`${subject}|${due}|${description}`)).slice(0, 24));
       const prev = byId.get(id);
-      byId.set(id, { id, subject, description, due, done: !!a.done || !!prev?.done, updated_at: now.toISOString() });
+      byId.set(id, { id, uid, subject, description, due, done: !!a.done || !!prev?.done, updated_at: now.toISOString() });
     }
     const rows = [...byId.values()];
     if (rows.length) {
@@ -99,10 +103,10 @@ Deno.serve(async (req) => {
     }
     // Devoirs disparus de Pronote sur la période lue (ou anciens identifiants) : on les retire
     const keep = rows.map((r) => r.id);
-    let del = db.from("orbit_devoirs").delete().gte("due", parisDay(start));
+    let del = db.from("orbit_devoirs").delete().eq("uid", uid).gte("due", parisDay(start));
     if (keep.length) del = del.not("id", "in", `(${keep.map((k) => `"${k}"`).join(",")})`);
     await del;
-    await db.from("orbit_devoirs").delete().lt("due", parisDay(new Date(now.getTime() - 30 * 864e5)));
+    await db.from("orbit_devoirs").delete().eq("uid", uid).lt("due", parisDay(new Date(now.getTime() - 30 * 864e5)));
 
     // Emploi du temps (14 jours). Une panne ici ne bloque pas les devoirs.
     let cours = 0;
@@ -110,16 +114,16 @@ Deno.serve(async (req) => {
       const tt = await pronote.timetableFromIntervals(session, new Date(now.getTime() - 864e5), new Date(now.getTime() + 14 * 864e5));
       pronote.parseTimetable(session, tt, { withCanceledClasses: true, withPlannedClasses: true, withSuperposedCanceledClasses: false });
       const cr = tt.classes.map((c: any) => ({
-        id: c.id + "@" + parisWall(new Date(c.startDate)).toISOString(),
+        id: P(c.id + "@" + parisWall(new Date(c.startDate)).toISOString()), uid,
         subject: c.is === "lesson" ? (c.subject?.name ?? null) : (c.title ?? (c.is === "detention" ? "Retenue" : "Activité")),
         room: (c.classrooms ?? []).join(", ") || null,
         teacher: (c.teacherNames ?? []).join(", ") || null,
         starts_at: parisWall(new Date(c.startDate)).toISOString(), ends_at: parisWall(new Date(c.endDate)).toISOString(),
         canceled: !!c.canceled, status: c.status ?? null, updated_at: now.toISOString(),
       }));
-      await db.from("orbit_cours").delete().gte("starts_at", new Date(now.getTime() - 2 * 864e5).toISOString());
+      await db.from("orbit_cours").delete().eq("uid", uid).gte("starts_at", new Date(now.getTime() - 2 * 864e5).toISOString());
       if (cr.length) await db.from("orbit_cours").upsert(cr, { onConflict: "id" });
-      await db.from("orbit_cours").delete().lt("starts_at", new Date(now.getTime() - 7 * 864e5).toISOString());
+      await db.from("orbit_cours").delete().eq("uid", uid).lt("starts_at", new Date(now.getTime() - 7 * 864e5).toISOString());
       cours = cr.length;
     } catch (e) {
       trace.push("emploi du temps : " + String((e as Error)?.message ?? e).slice(0, 120));
@@ -145,25 +149,25 @@ Deno.serve(async (req) => {
           subjects: (ov.subjectsAverages ?? []).map((a: any) => ({ name: a.subject?.name ?? "?", avg: val(a.student), classAvg: val(a.class_average), max: val(a.max), min: val(a.min), outOf: val(a.outOf) ?? 20 })),
           grades: grades.slice(0, 80),
         };
-        const { data: prev } = await db.from("orbit_kv").select("value").eq("key", "notes").maybeSingle();
+        const { data: prev } = await db.from("orbit_kv").select("value").eq("key", KV("notes")).maybeSingle();
         // Nouvelle note → message Discord (pas au tout premier chargement)
         if (prev?.value?.v === 2 && prev.value.grades) {
           const known = new Set(prev.value.grades.map((g: any) => g.id));
           const fresh = grades.filter((g: any) => !known.has(g.id)).slice(0, 5);
           if (fresh.length) await db.from("orbit_rappels").upsert(fresh.map((g: any) => ({
-            id: "n:" + g.id, source: "notes", at: now.toISOString(),
+            id: P("n:" + g.id), uid, source: "notes", at: now.toISOString(),
             title: `📝 Nouvelle note · ${g.subject ?? "?"} : ${g.value}${typeof g.value === "number" ? "/" + g.outOf : ""}`,
             body: [g.comment, g.avg != null ? `Moyenne de la classe : ${g.avg}/${g.outOf}` : "", g.coef && g.coef !== 1 ? `Coef ${g.coef}` : ""].filter(Boolean).join("\n") || null,
           })), { onConflict: "id", ignoreDuplicates: true });
         }
-        await db.from("orbit_kv").upsert({ key: "notes", value, updated_at: now.toISOString() });
+        await db.from("orbit_kv").upsert({ key: KV("notes"), value, updated_at: now.toISOString() });
         notes = grades.length;
       }
     } catch (e) {
       trace.push("notes : " + String((e as Error)?.message ?? e).slice(0, 120));
     }
 
-    await db.from("orbit_pronote").update({ last_sync: now.toISOString(), last_error: null, fail_count: 0 }).eq("id", 1);
+    await db.from("orbit_pronote").update({ last_sync: now.toISOString(), last_error: null, fail_count: 0 }).eq("id", uid);
     return json({ ok: true, mode, devoirs: rows.length, cours, notes, ...(trace.length ? { warn: trace.slice(-2) } : {}) });
   } catch (e) {
     let msg = (e as Error)?.name ? `${(e as Error).name}: ${(e as Error).message}` : String(e);
@@ -172,7 +176,7 @@ Deno.serve(async (req) => {
     await db.from("orbit_pronote").update({
       last_error: msg.slice(0, 3000), fail_count: fails,
       ...(mode === "setup" ? { pending_qr: null, pending_pin: null } : {}),
-    }).eq("id", 1);
+    }).eq("id", uid);
 
     // Alerte Discord : la synchro marchait et échoue 2 fois de suite (max 1 alerte / 12 h)
     const wasConnected = !!row.token && !/pas encore connecté/.test(msg);
@@ -180,12 +184,12 @@ Deno.serve(async (req) => {
     if (mode === "sync" && wasConnected && fails >= 2 && Date.now() - lastAlert > 12 * 3600e3) {
       const expired = /SessionExpired|Authenticate|BadCredentials|token|Identification/i.test(msg);
       await db.from("orbit_rappels").upsert({
-        id: "alert:pronote:" + new Date().toISOString().slice(0, 13), source: "orbit",
+        id: P("alert:pronote:" + new Date().toISOString().slice(0, 13)), uid, source: "orbit",
         title: expired ? "Pronote déconnecté : rescanne le QR code dans Orbit" : "La synchro Pronote ne marche plus",
         body: expired ? "Orbit → Devoirs → Pronote automatique → Reconnecter." : "Je réessaie toutes les 30 min. Si ça dure, préviens Claude avec le message d'erreur affiché dans Orbit.",
         at: new Date().toISOString(),
       }, { onConflict: "id" });
-      await db.from("orbit_pronote").update({ last_alert: new Date().toISOString() }).eq("id", 1);
+      await db.from("orbit_pronote").update({ last_alert: new Date().toISOString() }).eq("id", uid);
     }
     return json({ ok: false, mode, error: msg }, 200);
   }

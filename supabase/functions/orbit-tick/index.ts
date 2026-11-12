@@ -25,30 +25,50 @@ const subj = (s: string | null) => { if (!s) return "Cours"; const u = s.trim().
 const isOff = (c: any) => !!c.canceled || /absent|annul|supprim|pas de prof/i.test(c.status ?? "");
 const EXAM = /(?:^|[^\p{L}])(contr[ôo]le|ds|interro(?:gation)?|[ée]valuation|[ée]val|examen|bac blanc|partiel)(?![\p{L}])/iu;
 
+// Plusieurs comptes : chaque ligne de orbit_pronote est un compte. Identifiants et clés des comptes ≠ 1 préfixés.
+const Pf = (uid: number, id: string) => uid === 1 ? id : `u${uid}.${id}`;
+const KVf = (uid: number, k: string) => uid === 1 ? k : `u${uid}:${k}`;
+
 Deno.serve(async (req) => {
-  const { data: cfg } = await db.from("orbit_pronote").select("*").eq("id", 1).single();
-  if (!cfg || req.headers.get("x-orbit-key") !== cfg.run_key) return json({ error: "non autorisé" }, 401);
+  const { data: accounts } = await db.from("orbit_pronote").select("*").order("id");
+  const owner = accounts?.find((a: any) => a.id === 1);
+  if (!owner || req.headers.get("x-orbit-key") !== owner.run_key) return json({ error: "non autorisé" }, 401);
   const body = await req.json().catch(() => ({}));
   const now = new Date(), today = ymd(now), tomorrow = addDay(today, 1);
-  const log: string[] = [];
+  const out: any = {};
 
-  try { await plan(cfg, now, today, tomorrow, log, !!body.brief); } catch (e) { log.push("plan: " + (e as Error).message); }
-  const sent = await send(cfg, log);
-  return json({ ok: true, sent, log });
+  if (body.test) {
+    const acc = accounts!.find((a: any) => a.id === (Number(body.uid) || 1));
+    if (!acc) return json({ ok: false, error: "compte introuvable" });
+    const id = Pf(acc.id, "test:" + now.getTime());
+    await db.from("orbit_rappels").insert({ id, uid: acc.id, source: "orbit", at: now.toISOString(), title: "Test Orbit : les rappels arrivent bien ici 👋", body: "Tu recevras tes rappels, devoirs et alertes Pronote dans cette conversation." });
+    const log: string[] = [];
+    const sent = await send(acc, log);
+    return json({ ok: sent > 0, sent, error: sent ? undefined : (log.join(" ; ") || "Message non envoyé") });
+  }
+
+  for (const acc of accounts!) {
+    const log: string[] = [];
+    try { await plan(acc, now, today, tomorrow, log, !!body.brief && (Number(body.uid) || 1) === acc.id); } catch (e) { log.push("plan: " + (e as Error).message); }
+    const sent = await send(acc, log);
+    out[acc.id] = { sent, log };
+  }
+  return json({ ok: true, accounts: out });
 });
 
 async function plan(cfg: any, now: Date, today: string, tomorrow: string, log: string[], forceBrief: boolean) {
+  const uid: number = cfg.id, P = (id: string) => Pf(uid, id), KV = (k: string) => KVf(uid, k);
   const [{ data: tasksRaw }, { data: devoirs }, { data: cours }, { data: kvBrief }, { data: kvSet }] = await Promise.all([
-    db.from("orbit_tasks").select("id, data").eq("deleted", false),
-    db.from("orbit_devoirs").select("id, subject, description, due, done, done_local").gte("due", today).order("due"),
-    db.from("orbit_cours").select("id, subject, room, teacher, starts_at, ends_at, canceled, status").gte("ends_at", now.toISOString()).lte("starts_at", new Date(now.getTime() + 4 * 864e5).toISOString()).order("starts_at"),
-    db.from("orbit_kv").select("value").eq("key", "brief").maybeSingle(),
-    db.from("orbit_kv").select("value").eq("key", "settings").maybeSingle(),
+    db.from("orbit_tasks").select("id, data").eq("uid", uid).eq("deleted", false),
+    db.from("orbit_devoirs").select("id, subject, description, due, done, done_local").eq("uid", uid).gte("due", today).order("due"),
+    db.from("orbit_cours").select("id, subject, room, teacher, starts_at, ends_at, canceled, status").eq("uid", uid).gte("ends_at", now.toISOString()).lte("starts_at", new Date(now.getTime() + 4 * 864e5).toISOString()).order("starts_at"),
+    db.from("orbit_kv").select("value").eq("key", KV("brief")).maybeSingle(),
+    db.from("orbit_kv").select("value").eq("key", KV("settings")).maybeSingle(),
   ]);
   const revDone = new Set<string>(kvSet?.value?.revDone ?? []);
   const tasks = (tasksRaw ?? []).map((t: any) => ({ ...t.data, id: t.id })).filter((t: any) => !t.done);
   const hw = (devoirs ?? []).filter((d: any) => !d.done && !d.done_local);
-  const events = await gcal(cfg, log);
+  const events = await gcal(cfg, log, KV("gcal"));
   const rows: any[] = [];
   const keep = (prefix: string) => rows.filter((r) => r.id.startsWith(prefix)).map((r) => r.id);
 
@@ -64,11 +84,11 @@ async function plan(cfg: any, now: Date, today: string, tomorrow: string, log: s
     if (s <= now || s.getTime() - now.getTime() > 3 * 864e5) continue;
     if (/^📚/.test(e.title)) continue; // anciens devoirs Pronote copiés dans l'agenda : déjà rappelés
     const title = html(e.title);
-    if (e.allDay) { const at = wall(ymd(s), 7, 15); if (at > now) rows.push({ id: "g:" + e.id + ":d", source: "gcal", at: at.toISOString(), title: `📅 Aujourd'hui · ${title}`, body: e.location ? "📍 " + e.location : null }); }
+    if (e.allDay) { const at = wall(ymd(s), 7, 15); if (at > now) rows.push({ id: P("g:" + e.id + ":d"), source: "gcal", at: at.toISOString(), title: `📅 Aujourd'hui · ${title}`, body: e.location ? "📍 " + e.location : null }); }
     else {
       for (const [min, label] of [[60, "Dans 1 h"], [10, "Dans 10 min"]] as const) {
         const at = new Date(s.getTime() - min * 60e3);
-        if (at > now) rows.push({ id: `g:${e.id}:${min}`, source: "gcal", at: at.toISOString(), title: `📅 ${label} · ${title}`, body: `${hm(s)} – ${hm(e.end)}${e.location ? "\n📍 " + e.location : ""}` });
+        if (at > now) rows.push({ id: P(`g:${e.id}:${min}`), source: "gcal", at: at.toISOString(), title: `📅 ${label} · ${title}`, body: `${hm(s)} – ${hm(e.end)}${e.location ? "\n📍 " + e.location : ""}` });
       }
     }
   }
@@ -81,7 +101,7 @@ async function plan(cfg: any, now: Date, today: string, tomorrow: string, log: s
   for (const x of exams) for (const n of [3, 2, 1]) {
     const day = addDay(x.due, -n), at = wall(day, 18);
     if (at <= now || revDone.has(`rv:${x.id}:${n}`)) continue;
-    rows.push({ id: `r:${x.id}:${n}`, source: "revision", at: at.toISOString(), title: `📖 Révise ${x.subject} · contrôle ${n === 1 ? "demain" : "dans " + n + " jours"}`, body: `Séance de révision ${4 - n}/3 (30-45 min).\n${html(x.what)}` });
+    rows.push({ id: P(`r:${x.id}:${n}`), source: "revision", at: at.toISOString(), title: `📖 Révise ${x.subject} · contrôle ${n === 1 ? "demain" : "dans " + n + " jours"}`, body: `Séance de révision ${4 - n}/3 (30-45 min).\n${html(x.what)}` });
   }
 
   // 4. Cours annulés / prof absent dans les 3 prochains jours : alerte immédiate (une seule fois par cours)
@@ -90,26 +110,26 @@ async function plan(cfg: any, now: Date, today: string, tomorrow: string, log: s
     const s = new Date(c.starts_at);
     if (s.getTime() - now.getTime() > 3 * 864e5) continue;
     const when = ymd(s) === today ? "aujourd'hui" : ymd(s) === tomorrow ? "demain" : shortDay(s);
-    rows.push({ id: "x:" + c.id, source: "cours", at: now.toISOString(), title: `🚫 ${subj(c.subject)} annulé ${when} (${hm(s)})`, body: [c.status && !/^annul/i.test(c.status) ? c.status : "", c.teacher ? "Prof : " + c.teacher : "", `${hm(c.starts_at)} – ${hm(c.ends_at)} → temps libre`].filter(Boolean).join("\n") });
+    rows.push({ id: P("x:" + c.id), source: "cours", at: now.toISOString(), title: `🚫 ${subj(c.subject)} annulé ${when} (${hm(s)})`, body: [c.status && !/^annul/i.test(c.status) ? c.status : "", c.teacher ? "Prof : " + c.teacher : "", `${hm(c.starts_at)} – ${hm(c.ends_at)} → temps libre`].filter(Boolean).join("\n") });
   }
 
   // 5. Briefing du matin (7h, une fois par jour)
   const h = parisHour(now);
   if (forceBrief || (h >= 7 && h < 11 && kvBrief?.value?.day !== today)) {
     const b = brief(now, today, tomorrow, cours ?? [], hw, tasks, events, exams);
-    if (b) rows.push({ id: "b:" + today + (forceBrief ? ":" + now.getTime() : ""), source: "brief", at: now.toISOString(), title: b.title, body: b.body });
-    if (!forceBrief) await db.from("orbit_kv").upsert({ key: "brief", value: { day: today }, updated_at: now.toISOString() });
+    if (b) rows.push({ id: P("b:" + today) + (forceBrief ? ":" + now.getTime() : ""), source: "brief", at: now.toISOString(), title: b.title, body: b.body });
+    if (!forceBrief) await db.from("orbit_kv").upsert({ key: KV("brief"), value: { day: today }, updated_at: now.toISOString() });
   }
 
   // Ménage : rappels pas encore envoyés devenus inutiles (tâche faite, événement déplacé, cours rétabli…)
-  for (const p of ["o:", "g:", "r:", "x:"]) {
+  for (const p of ["o:", P("g:"), P("r:"), P("x:")]) {
     const ids = new Set(keep(p));
-    const { data: old } = await db.from("orbit_rappels").select("id").like("id", p + "%").is("sent_at", null);
+    const { data: old } = await db.from("orbit_rappels").select("id").eq("uid", uid).like("id", p + "%").is("sent_at", null);
     const gone = (old ?? []).map((r: any) => r.id).filter((id: string) => !ids.has(id));
     if (gone.length) await db.from("orbit_rappels").delete().in("id", gone);
   }
   if (rows.length) {
-    const { error } = await db.from("orbit_rappels").upsert(rows.map((r) => ({ ...r, title: r.title.slice(0, 200), body: r.body ? String(r.body).slice(0, 3800) : null })), { onConflict: "id", ignoreDuplicates: true });
+    const { error } = await db.from("orbit_rappels").upsert(rows.map((r) => ({ ...r, uid, title: r.title.slice(0, 200), body: r.body ? String(r.body).slice(0, 3800) : null })), { onConflict: "id", ignoreDuplicates: true });
     if (error) log.push("upsert: " + error.message);
   }
   log.push(`planifiés ${rows.length}`);
@@ -152,23 +172,23 @@ function brief(now: Date, today: string, tomorrow: string, cours: any[], hw: any
   return { title: `☀️ ${cap(longDay(now))} · ta journée`, body: L.join("\n").trim() };
 }
 
-async function gcal(cfg: any, log: string[]) {
+async function gcal(cfg: any, log: string[], key: string) {
   if (!cfg.ical_url) return [];
-  const { data: cache } = await db.from("orbit_kv").select("value, updated_at").eq("key", "gcal").maybeSingle();
+  const { data: cache } = await db.from("orbit_kv").select("value, updated_at").eq("key", key).maybeSingle();
   if (cache && Date.now() - new Date(cache.updated_at).getTime() < 20 * 60e3) return cache.value ?? [];
   try {
     const r = await fetch(cfg.ical_url);
     if (!r.ok) { log.push("gcal " + r.status); return cache?.value ?? []; }
     const events = parseICS(await r.text(), new Date(Date.now() - 2 * 864e5), new Date(Date.now() + 22 * 864e5));
-    await db.from("orbit_kv").upsert({ key: "gcal", value: events, updated_at: new Date().toISOString() });
+    await db.from("orbit_kv").upsert({ key, value: events, updated_at: new Date().toISOString() });
     return events;
   } catch { log.push("gcal injoignable"); return cache?.value ?? []; }
 }
 
 async function send(cfg: any, log: string[]) {
   const token = Deno.env.get("DISCORD_BOT_TOKEN");
-  if (!token || !cfg.discord_id) { log.push("Discord non configuré"); return 0; }
-  const { data: jobs } = await db.from("orbit_rappels").select("*")
+  if (!token || !cfg.discord_id) { log.push(cfg.discord_id ? "Bot Discord non configuré" : "Pas d'ID Discord pour ce compte"); return 0; }
+  const { data: jobs } = await db.from("orbit_rappels").select("*").eq("uid", cfg.id)
     .is("sent_at", null).lt("attempts", 3)
     .lte("at", new Date().toISOString()).gt("at", new Date(Date.now() - 6 * 3600e3).toISOString())
     .order("at").limit(15);
