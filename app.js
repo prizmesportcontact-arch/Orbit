@@ -473,8 +473,32 @@ function setHeader() {
     $('#title').textContent = TABS.find(t => t[0] === current)[1];
     $('#date').textContent = cap(fmtDay(d));
   }
+  renderRibbon();
   fitTitle();
 }
+/* Signature : le ruban de ta journée (un segment coloré par cours, curseur blanc = maintenant) */
+let ribbonSig = '', ribbonDrawn = false;
+function renderRibbon() {
+  const r = $('#ribbon'); if (!r) return;
+  const now = new Date(), C = coursOn(startOfDay(now)).slice().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+  if (!C.length) { r.hidden = true; ribbonSig = ''; return; }
+  const t0 = new Date(C[0].starts_at).getTime(), t1 = Math.max(...C.map(c => new Date(c.ends_at).getTime())), span = Math.max(1, t1 - t0);
+  const pc = t => Math.max(0, Math.min(100, (t - t0) / span * 100));
+  const real = C.filter(c => !isOff(c)), cur = real.find(c => new Date(c.starts_at) <= now && now < new Date(c.ends_at)), nxt = real.find(c => new Date(c.starts_at) > now);
+  const segs = C.map((c, i) => { const a = new Date(c.starts_at).getTime(), b = new Date(c.ends_at).getTime(), off = isOff(c), n = prettySubj(c.subject) || 'Cours';
+    return `<i class="rbSeg${off ? ' off' : ''}${!off && b <= now ? ' past' : ''}" style="--i:${i};left:${pc(a)}%;width:calc(${pc(b) - pc(a)}% - 2px);--c:${subjColor(n)}" title="${esc(n)} ${fmtTime(c.starts_at)}"></i>`; }).join('');
+  const inDay = now.getTime() >= t0 && now.getTime() <= t1;
+  const mid = cur ? `<b>${esc(prettySubj(cur.subject) || 'Cours')}${cur.room ? ' en ' + esc(cur.room) : ''}, jusqu'à ${fmtTime(cur.ends_at)}</b>` : nxt ? `<b>Ensuite ${esc(prettySubj(nxt.subject) || 'cours')} à ${fmtTime(nxt.starts_at)}</b>` : now.getTime() > t1 ? '<b>Cours finis</b>' : '';
+  const sig = segs + mid;
+  if (sig !== ribbonSig) {
+    ribbonSig = sig;
+    r.innerHTML = `<div class="rbTrack" role="img" aria-label="${real.length} cours aujourd'hui, de ${fmtTime(C[0].starts_at)} à ${fmtTime(new Date(t1))}">${segs}<b class="rbNow" id="rbNow"></b></div><div class="rbLbl"><span>${fmtTime(C[0].starts_at)}</span>${mid}<span>${fmtTime(new Date(t1))}</span></div>`;
+    if (!ribbonDrawn) { ribbonDrawn = true; r.classList.add('draw'); setTimeout(() => r.classList.remove('draw'), 1600); }
+  }
+  r.hidden = false;
+  const k = $('#rbNow'); k.style.display = inDay ? '' : 'none'; k.style.left = pc(now.getTime()) + '%';
+}
+setInterval(() => { if (document.visibilityState === 'visible') renderRibbon(); }, 30e3);
 // Le grand titre rétrécit pour toujours tenir à côté des boutons (« Dimanche 15 » sur téléphone)
 function fitTitle() {
   const h = $('#title'); h.style.transition = 'none'; h.style.fontSize = '';
@@ -525,7 +549,7 @@ function coursHTML(c) {
   const s = prettySubj(c.subject) || 'Cours';
   const why = c.status && !/^annul/i.test(c.status) ? c.status : '';
   const ct = contenuFor(c), ck = ct ? ` data-ck="${ct.id}"` : '';
-  if (isOff(c)) return `<div class="item cours canceled"${ck}>${subjBadge(s, 'sq', true)}<div class="bd"><div class="cancelTop"><span class="tag cancel">ANNULÉ</span>${why ? `<b>${esc(why)}</b>` : ''}</div><div class="tt">${esc(s)}</div><div class="mm"><span>${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}</div></div></div>`;
+  if (isOff(c)) return `<div class="item cours canceled"${ck}>${subjBadge(s, 'sq', true)}<div class="bd"><div class="cancelTop"><span class="tag cancel">Annulé</span>${why ? `<b>${esc(why)}</b>` : ''}</div><div class="tt">${esc(s)}</div><div class="mm"><span>${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}</div></div></div>`;
   return `<div class="item cours${ct ? ' hasC' : ''}"${ck}>${subjBadge(s)}<div class="bd"><div class="tt">${esc(s)}${ct ? `<span class="cBadge">${ICON.book}Cours</span>` : ''}</div><div class="mm"><span class="tag cours">${fmtTime(c.starts_at)} – ${fmtTime(c.ends_at)}</span>${c.room ? `<span>${esc(c.room)}</span>` : ''}${c.teacher ? `<span>${esc(teacherName(c.teacher))}</span>` : ''}${c.status ? `<span class="tag soon">${esc(c.status)}</span>` : ''}</div></div></div>`;
 }
 function evHTML(e) {
@@ -601,7 +625,8 @@ function rToday() {
   if (next) {
     const n = daysLeft(next), C = 2 * Math.PI * 54, frac = Math.max(.06, Math.min(1, 1 - n / 14));
     const rem = (next.reminders || []).filter(r => !r.fired && new Date(r.at) > now).slice(0, 2);
-    hero = `<div class="hero">
+    const rc = next.subject ? subjColor(next.subject) : 'var(--acc)';
+    hero = `<div class="hero" style="--rc:${rc}">
       <div class="ring"><svg viewBox="0 0 132 132" role="img" aria-label="Échéance dans ${n} jour(s)"><circle class="bg" cx="66" cy="66" r="54"/><circle class="fg" cx="66" cy="66" r="54" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - frac)}"/></svg>
         <div class="in"><b>${n === 0 ? 'Auj.' : 'J-' + n}</b><small>${n === 0 ? 'jour J' : n === 1 ? 'demain' : fmtShort(dueDate(next))}</small></div></div>
       <div class="info"><span class="pillTag">${esc(next.subject || (next.kind === 'devoir' ? 'Devoir' : next.kind === 'rdv' ? 'Rendez-vous' : 'Tâche'))}</span>
@@ -1004,7 +1029,7 @@ function rAI(force) {
   const inp = $('#chatIn');
   const grow = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px'; };
   inp.oninput = grow;
-  inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(max-width:899px)').matches) { e.preventDefault(); $('#chatF').requestSubmit(); } };
+  inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(max-width:699px)').matches) { e.preventDefault(); $('#chatF').requestSubmit(); } };
   $('#chatF').onsubmit = e => { e.preventDefault(); const q = inp.value.trim(); if (q || stImgs.length) { inp.value = ''; grow(); ask(q); } };
   v.querySelectorAll('#iaSugg button').forEach(b => b.onclick = () => b.dataset.q.startsWith('#') ? iaAction(b.dataset.q.slice(1)) : ask(b.dataset.q));
   $('#iaNew').onclick = () => { chat = []; saveChat(); paintChat(); };
@@ -1020,7 +1045,7 @@ function rAI(force) {
     if (mk) { const i = +mk.dataset.mkfiche; makeFiche({ topic: (chat[i - 1]?.content || '').slice(0, 300), extra: chat[i].content }); }
   };
   paintImgs(); paintChat(); loadFiches();
-  if (!matchMedia('(max-width:899px)').matches) inp.focus();
+  if (!matchMedia('(max-width:699px)').matches) inp.focus();
 }
 function snapshotCtx() {
   const A = active().sort(byDue).slice(0, 60).map(t => `- [${t.id}] ${t.title}${t.kind === 'devoir' ? ' (devoir ' + (t.subject || '') + ')' : ''}${t.due ? ' — pour le ' + t.due + (t.time ? ' ' + t.time : '') : ''}${t.repeat ? ' — répétition ' + t.repeat : ''}`).join('\n');
@@ -1077,7 +1102,7 @@ function enhance(root) {
   }
   const mm = root.querySelectorAll('.mmd:not(.done)');
   if (mm.length) {
-    mermaidP = mermaidP || loadScript('vendor/mermaid.min.js').then(() => window.mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif', themeVariables: { primaryColor: '#2a2320', primaryBorderColor: getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#ff6a47', primaryTextColor: '#f7f2ec', lineColor: '#bdb4ac', fontSize: '15px' } }));
+    mermaidP = mermaidP || loadScript('vendor/mermaid.min.js').then(() => window.mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', fontFamily: 'Schibsted Grotesk, system-ui, sans-serif', themeVariables: { primaryColor: '#21242B', primaryBorderColor: getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#ff6a47', primaryTextColor: '#F5F5F2', lineColor: '#9C9EA6', fontSize: '15px' } }));
     mermaidP.then(async () => { for (const el of mm) { el.classList.add('done'); const src = decodeURIComponent(el.dataset.src); try { const { svg } = await window.mermaid.render('m' + Math.random().toString(36).slice(2), src); el.innerHTML = svg; } catch { el.innerHTML = `<pre class="code">${esc(src)}</pre>`; } } }).catch(() => mm.forEach(el => el.innerHTML = '<div class="mmdLoad">Schéma indisponible hors connexion</div>'));
   }
 }
@@ -1386,7 +1411,7 @@ function openSettings() {
   $('#sOut').onclick = () => { if (!confirm('Déconnecter Orbit de cet appareil ?')) return; localStorage.clear(); location.hash = ''; location.reload(); };
   $('#eX').onclick = closeSheet; openSheet();
 }
-function applyAccent() { const [a, b, c] = ACCENTS[settings.accent] || ACCENTS.corail; const r = document.documentElement.style; r.setProperty('--acc', a); r.setProperty('--acc2', b); r.setProperty('--accSoft', c); document.body.classList.toggle('glass', settings.style === 'glass'); document.documentElement.classList.toggle('glass', settings.style === 'glass'); document.querySelector('meta[name=theme-color]')?.setAttribute('content', settings.style === 'glass' ? '#030203' : '#050404'); }
+function applyAccent() { const [a, b, c] = ACCENTS[settings.accent] || ACCENTS.corail; const r = document.documentElement.style; r.setProperty('--acc', a); r.setProperty('--acc2', b); r.setProperty('--accSoft', c); document.body.classList.toggle('glass', settings.style === 'glass'); document.documentElement.classList.toggle('glass', settings.style === 'glass'); document.querySelector('meta[name=theme-color]')?.setAttribute('content', settings.style === 'glass' ? '#020205' : '#000000'); }
 
 /* ---------- Pronote automatique ---------- */
 let pnBusy = false, pnMsg = '', qrData = null;
