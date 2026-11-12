@@ -480,19 +480,26 @@ function setHeader() {
 let ribbonSig = '', ribbonDrawn = false;
 function renderRibbon() {
   const r = $('#ribbon'); if (!r) return;
-  const now = new Date(), C = coursOn(startOfDay(now)).slice().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+  const now = new Date(), sortC = L => L.slice().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+  // Journée de cours finie (ou pas de cours aujourd'hui) : on affiche le prochain jour de cours
+  let C = sortC(coursOn(startOfDay(now))), ahead = null;
+  if (!C.length || now >= new Date(Math.max(...C.map(c => new Date(c.ends_at).getTime())))) {
+    C = [];
+    for (let i = 1; i <= 7 && !C.length; i++) { const d = addDays(startOfDay(now), i); C = sortC(coursOn(d)); if (C.length) ahead = { d, i }; }
+  }
   if (!C.length) { r.hidden = true; ribbonSig = ''; return; }
   const t0 = new Date(C[0].starts_at).getTime(), t1 = Math.max(...C.map(c => new Date(c.ends_at).getTime())), span = Math.max(1, t1 - t0);
   const pc = t => Math.max(0, Math.min(100, (t - t0) / span * 100));
   const real = C.filter(c => !isOff(c)), cur = real.find(c => new Date(c.starts_at) <= now && now < new Date(c.ends_at)), nxt = real.find(c => new Date(c.starts_at) > now);
   const segs = C.map((c, i) => { const a = new Date(c.starts_at).getTime(), b = new Date(c.ends_at).getTime(), off = isOff(c), n = prettySubj(c.subject) || 'Cours';
     return `<i class="rbSeg${off ? ' off' : ''}${!off && b <= now ? ' past' : ''}" style="--i:${i};left:${pc(a)}%;width:calc(${pc(b) - pc(a)}% - 2px);--c:${subjColor(n)}" title="${esc(n)} ${fmtTime(c.starts_at)}"></i>`; }).join('');
-  const inDay = now.getTime() >= t0 && now.getTime() <= t1;
-  const mid = cur ? `<b>${esc(prettySubj(cur.subject) || 'Cours')}${cur.room ? ' en ' + esc(cur.room) : ''}, jusqu'à ${fmtTime(cur.ends_at)}</b>` : nxt ? `<b>Ensuite ${esc(prettySubj(nxt.subject) || 'cours')} à ${fmtTime(nxt.starts_at)}</b>` : now.getTime() > t1 ? '<b>Cours finis</b>' : '';
+  const inDay = !ahead && now.getTime() >= t0 && now.getTime() <= t1;
+  const dayName = ahead ? (ahead.i === 1 ? 'Demain' : cap(ahead.d.toLocaleDateString('fr-FR', { weekday: 'long' }))) : '';
+  const mid = ahead ? `<b>${dayName}, ${real.length} cours${real[0] ? ', début à ' + fmtTime(real[0].starts_at) : ''}</b>` : cur ? `<b>${esc(prettySubj(cur.subject) || 'Cours')}${cur.room ? ' en ' + esc(cur.room) : ''}, jusqu'à ${fmtTime(cur.ends_at)}</b>` : nxt ? `<b>Ensuite ${esc(prettySubj(nxt.subject) || 'cours')} à ${fmtTime(nxt.starts_at)}</b>` : now.getTime() > t1 ? '<b>Cours finis</b>' : '';
   const sig = segs + mid;
   if (sig !== ribbonSig) {
     ribbonSig = sig;
-    r.innerHTML = `<div class="rbTrack" role="img" aria-label="${real.length} cours aujourd'hui, de ${fmtTime(C[0].starts_at)} à ${fmtTime(new Date(t1))}">${segs}<b class="rbNow" id="rbNow"></b></div><div class="rbLbl"><span>${fmtTime(C[0].starts_at)}</span>${mid}<span>${fmtTime(new Date(t1))}</span></div>`;
+    r.innerHTML = `<div class="rbTrack" role="img" aria-label="${real.length} cours ${ahead ? dayName.toLowerCase() : "aujourd'hui"}, de ${fmtTime(C[0].starts_at)} à ${fmtTime(new Date(t1))}">${segs}<b class="rbNow" id="rbNow"></b></div><div class="rbLbl"><span>${fmtTime(C[0].starts_at)}</span>${mid}<span>${fmtTime(new Date(t1))}</span></div>`;
     if (!ribbonDrawn) { ribbonDrawn = true; r.classList.add('draw'); setTimeout(() => r.classList.remove('draw'), 1600); }
   }
   r.hidden = false;
