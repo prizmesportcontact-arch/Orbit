@@ -648,15 +648,21 @@ pre.code{white-space:pre-wrap;font-size:13px;background:var(--s2);padding:10px 1
 .wkChip{display:inline-flex;align-items:center;gap:2px;font-size:13px;font-weight:600;color:var(--mut)}
 .wkChip svg{width:15px;height:15px}
 .jrIn{flex:none;font-size:13px;font-weight:600;color:var(--txt);text-align:right}
-.jrSteps{list-style:none;margin:0;padding:4px 16px 12px;display:flex;flex-direction:column;box-shadow:inset 0 1px 0 var(--line)}
-.jrSteps li{display:flex;gap:12px;padding:9px 0;font-size:14px;line-height:1.45;color:var(--mut)}
-.jrSteps li+li{box-shadow:inset 0 1px 0 var(--line)}
-.jrSteps li>b{width:44px;flex:none;color:var(--txt);font-weight:600;font-variant-numeric:tabular-nums}
-.jrSteps li span b{color:var(--txt);font-weight:600}
-.jrRT{display:block;line-height:1.5;margin:0 16px 14px;padding:10px 12px;border-radius:var(--r1);background:var(--s2);font-size:14px;color:var(--mut)}
+.jrT span{max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jr.hab{box-shadow:inset 0 0 0 1.5px var(--s4)}
+.jrSteps{list-style:none;margin:0;padding:6px 16px 14px;display:flex;flex-direction:column;box-shadow:inset 0 1px 0 var(--line)}
+.jrSteps li{display:flex;gap:12px;align-items:flex-start;padding:8px 0;font-size:15px;line-height:1.45;color:var(--mut);position:relative}
+.jrSteps li>i{flex:none;width:64px;display:flex;justify-content:center;font-style:normal;color:var(--dim);padding-top:1px}
+.jrSteps li>i svg{width:18px;height:18px}
+.jrSteps li:not(:last-child)>i:after{content:"";position:absolute;left:31px;top:34px;bottom:-6px;width:2px;border-radius:2px;background:var(--s3)}
+.jrSteps li.w>i:empty:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--s4);margin-top:6px}
+.jrSteps li.b{color:var(--txt)}
+.jrSteps li span b{color:var(--txt);font-weight:700}
+.jrSteps li small{display:inline;margin-left:6px;font-size:13px;color:var(--mut)}
+.jrRT{display:block;line-height:1.5;margin:0 16px 10px;padding:10px 12px;border-radius:var(--r1);background:var(--s2);font-size:14px;color:var(--mut)}
+.jrRT:empty{display:none}
 .jrRT b{color:var(--txt)}.jrRT em{font-style:normal;color:var(--warn);font-weight:600}
 .jrRT.bad{box-shadow:inset 3px 0 0 var(--warn)}
-.jrRT .spin{width:14px;height:14px;display:inline-block;vertical-align:-2px;margin-right:6px}
 .jrRT .liveDot{display:inline-block;margin-right:8px;vertical-align:1px}
 .busCard{display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;color:var(--txt);padding:18px 20px}
 .busCard.hot{box-shadow:inset 0 0 0 1.5px var(--acc)}
@@ -665,6 +671,9 @@ pre.code{white-space:pre-wrap;font-size:13px;background:var(--s2);padding:10px 1
 .busCard.hot .bcTop b{color:var(--acc)}
 .bcMain{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .bcMain>b{font-size:26px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.bcMain>span:not(.lnChip){font-size:15px;color:var(--mut)}
+.busCard small{line-height:1.8}.busCard small em{font-style:normal;color:var(--warn)}
+.busCard .lnChip{height:26px;font-size:14px}
 .busCard small{font-size:14px;color:var(--mut)}
 #busHome:empty{display:none}
 @media (max-width:699px){.jr summary{gap:12px;padding:12px 14px}.jrT{width:64px}.jrT b{font-size:22px}.jrIn{display:none}.tabbar button,.tabbar .plus{width:50px}.tabbar .pill{width:50px}}

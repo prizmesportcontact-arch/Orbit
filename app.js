@@ -634,37 +634,47 @@ const minsTo = t => Math.round((new Date(t) - Date.now()) / 6e4);
 const inMin = m => m <= 0 ? 'maintenant' : m < 60 ? `dans ${m} min` : `dans ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 const lineChip = l => `<span class="lnChip" style="--lc:${l?.color || '#5B8CFF'};--lt:${l?.text || '#fff'}">${ICON.bus}${esc(l?.code || 'Bus')}</span>`;
 const firstPt = j => j.sections.find(x => x.type === 'pt');
-function journeyHTML(j, target, open) {
-  const pt = j.sections.filter(x => x.type === 'pt'), f = pt[0];
-  const late = target && new Date(j.arr) > target;
-  const chain = j.sections.filter(x => x.type === 'pt' || (x.type === 'walk' && x.duration >= 120)).map(x => x.type === 'pt' ? lineChip(x.line) : `<span class="wkChip">${ICON.walk}${Math.round(x.duration / 60)}</span>`).join('<i class="jrSep"></i>');
-  const steps = j.sections.map(x => {
-    if (x.type === 'pt') return `<li class="pt"><b>${fmtTime(x.dep)}</b><span>${lineChip(x.line)} depuis <b>${esc(x.from)}</b>${x.line?.direction ? `, direction ${esc(x.line.direction)}` : ''}. Descends à <b>${esc(x.to)}</b> (${fmtTime(x.arr)}).</span></li>`;
-    if (x.type === 'walk' && x.duration >= 60) return `<li><b>${fmtTime(x.dep)}</b><span>Marche ${Math.round(x.duration / 60)} min jusqu'à ${esc(x.to.replace(/^\d+\s+Square Pierre Fite$/, 'au lycée'))}</span></li>`;
-    if (x.type === 'waiting') return `<li><b>${fmtTime(x.dep)}</b><span>Attente ${Math.round(x.duration / 60)} min</span></li>`;
-    return '';
-  }).join('');
-  const m = minsTo(j.dep);
-  return `<details class="jr${late ? ' late' : ''}"${open ? ' open' : ''}><summary>
-      <div class="jrT"><b>${fmtTime(j.dep)}</b><span>arrivée ${fmtTime(j.arr)}</span></div>
-      <div class="jrM"><div class="jrC">${chain}</div><small>${j.habit ? '<span class="habit">Ton bus habituel</span> ' : ''}${f ? `Arrêt ${esc(f.from)}` : ''}${j.transfers ? `, ${j.transfers} correspondance${j.transfers > 1 ? 's' : ''}` : ', direct'}${late ? ', <em>arrive après le début du cours</em>' : ''}</small></div>
-      <div class="jrIn">${m > -2 && m < 600 ? inMin(m) : ''}</div></summary>
-    <ol class="jrSteps">${steps}</ol>${f && sameDay(f.dep, new Date()) ? `<div class="jrRT" data-stop="${esc(f.stopId || '')}" data-line="${esc(f.lineId || '')}" data-dep="${esc(f.dep)}"><span class="spin"></span> Temps réel…</div>` : ''}</details>`;
+// Résumé lisible d'un trajet : les bus (où monter, où descendre), les correspondances, la marche au début et à la fin
+function tripPlan(j) {
+  const S = j.sections, pts = S.filter(x => x.type === 'pt');
+  if (!pts.length) return null;
+  const i0 = S.indexOf(pts[0]), iN = S.indexOf(pts[pts.length - 1]);
+  const walkBefore = S.slice(0, i0).filter(x => x.type === 'walk').reduce((n, x) => n + x.duration, 0);
+  const walkAfter = S.slice(iN + 1).filter(x => x.type === 'walk').reduce((n, x) => n + x.duration, 0);
+  const legs = pts.map((x, k) => ({ ...x, wait: k ? Math.round((new Date(x.dep) - new Date(pts[k - 1].arr)) / 6e4) : 0 }));
+  return { legs, walkBefore: Math.round(walkBefore / 60), walkAfter: Math.round(walkAfter / 60), board: new Date(pts[0].dep), arr: new Date(j.arr), leave: new Date(j.dep) };
 }
+const destLbl = t => !t ? '' : /square pierre fite|lyc[ée]e/i.test(t) ? 'au lycée' : /grande rue|rue du louvre/i.test(t) ? 'chez toi' : 'à ' + t;
+function journeyHTML(j, target, open, toLbl = '') {
+  const P = tripPlan(j); if (!P) return '';
+  const late = target && P.arr > target, m = Math.round((P.board - Date.now()) / 6e4), f = P.legs[0];
+  const chain = P.legs.map(x => lineChip(x.line)).join('<i class="jrSep"></i>');
+  const steps = [
+    P.walkBefore >= 3 ? `<li class="w"><i>${ICON.walk}</i><span>Pars à <b>${fmtTime(P.leave)}</b> : ${P.walkBefore} min à pied jusqu'à l'arrêt ${esc(f.from)}</span></li>` : '',
+    ...P.legs.map((x, k) => `${k ? `<li class="w"><i></i><span>Correspondance : ${x.wait} min d'attente${x.from !== P.legs[k - 1].to ? `, va à l'arrêt ${esc(x.from)}` : ''}</span></li>` : ''}
+      <li class="b"><i>${lineChip(x.line)}</i><span>Monte à <b>${fmtTime(x.dep)}</b> à l'arrêt <b>${esc(x.from)}</b>${x.line?.direction ? `<small>direction ${esc(x.line.direction)}</small>` : ''}<br>Descends à <b>${esc(x.to)}</b><small>vers ${fmtTime(x.arr)}</small></span></li>`),
+    `<li class="w"><i>${P.walkAfter >= 1 ? ICON.walk : ''}</i><span>${P.walkAfter >= 1 ? `${P.walkAfter} min à pied, ` : ''}arrivée ${esc(toLbl || destLbl(j.sections.at(-1)?.to))} à <b>${fmtTime(P.arr)}</b></span></li>`,
+  ].join('');
+  return `<details class="jr${late ? ' late' : ''}${j.habit ? ' hab' : ''}"${open ? ' open' : ''}><summary>
+      <div class="jrT"><b>${fmtTime(f.dep)}</b><span>à ${esc(f.from)}</span></div>
+      <div class="jrM"><div class="jrC">${chain}${j.habit ? '<span class="habit">habituel</span>' : ''}</div><small>Arrivée ${fmtTime(P.arr)}${late ? ' <em>(en retard pour le cours)</em>' : ''}</small></div>
+      <div class="jrIn">${m > -2 && m < 600 ? inMin(m) : ''}</div></summary>
+    ${sameDay(f.dep, new Date()) && f.stopId ? `<div class="jrRT" data-stop="${esc(f.stopId)}" data-line="${esc(f.lineId || '')}" data-dep="${esc(f.dep)}" data-code="${esc(f.line?.code || '')}"></div>` : ''}
+    <ol class="jrSteps">${steps}</ol></details>`;
+}
+// Temps réel : une seule phrase sur TON bus (à l'heure / en retard)
 async function fillRealtime(root) {
-  for (const el of root.querySelectorAll('.jrRT[data-stop]')) {
-    if (!el.dataset.stop) { el.remove(); continue; }
+  for (const el of root.querySelectorAll('.jrRT[data-stop]:empty')) {
     try {
       const r = await busCall('next', { stopId: el.dataset.stop, lineId: el.dataset.line }, 30e3);
       const want = new Date(el.dataset.dep).getTime();
-      const P = r.passes.map(p => ({ ...p, t: new Date(p.expected || p.aimed).getTime(), a: p.aimed ? new Date(p.aimed).getTime() : null }));
-      if (!P.length) { el.innerHTML = 'Pas encore de temps réel pour cet arrêt (il arrive en général 1 h avant).'; continue; }
-      const match = P.reduce((b, p) => Math.abs((p.a ?? p.t) - want) < Math.abs((b.a ?? b.t) - want) ? p : b);
+      const P = r.passes.map(p => ({ t: new Date(p.expected || p.aimed).getTime(), a: p.aimed ? new Date(p.aimed).getTime() : null }));
+      const match = P.length ? P.reduce((b, p) => Math.abs((p.a ?? p.t) - want) < Math.abs((b.a ?? b.t) - want) ? p : b) : null;
+      if (!match || Math.abs((match.a ?? match.t) - want) > 15 * 6e4) { el.remove(); continue; }
       const delay = match.a ? Math.round((match.t - match.a) / 6e4) : 0;
-      const close = Math.abs((match.a ?? match.t) - want) < 15 * 6e4;
-      el.innerHTML = `<i class="liveDot"></i>${close ? `Ton bus passe à <b>${fmtTime(match.t)}</b>${delay > 0 ? ` <em>(+${delay} min)</em>` : delay < 0 ? ` (${delay} min)` : ', à l\'heure'}. ` : 'Temps réel. '}Prochains passages : ${P.slice(0, 3).map(p => `${fmtTime(p.t)}`).join(', ')}`;
-      el.classList.toggle('bad', close && delay >= 3);
-    } catch { el.innerHTML = 'Temps réel indisponible pour le moment.'; }
+      el.innerHTML = `<i class="liveDot"></i>En direct : le ${esc(el.dataset.code)} passe à <b>${fmtTime(match.t)}</b>${delay >= 2 ? ` <em>${delay} min de retard</em>` : delay <= -2 ? ` <em>${-delay} min d'avance</em>` : ', à l\'heure'}`;
+      el.classList.toggle('bad', Math.abs(delay) >= 2);
+    } catch { el.remove(); }
   }
 }
 function busWeekSeg() {
@@ -692,10 +702,10 @@ async function rBus() {
     const html = `${dis.length ? `<div class="pnWarn"><b>Perturbations sur le réseau</b>${dis.map(d => `<span>${esc(d.text)}</span>`).join('')}</div>` : ''}
       ${al ? `<div class="dayHead"><b>Aller ${dayLbl}</b><span>${esc(day.firstSubj)} à ${fmtTime(day.first)}${changeNote}</span></div>
         ${al.late ? `<div class="busNote">Aucun bus n'arrive avant ${fmtTime(day.first)} depuis ${HOMES[home]}.</div>` : ''}
-        <div class="jrList">${al.journeys.map(j => journeyHTML(j, day.first, j === bestAller(al, day.first))).join('') || '<div class="empty">Aucun trajet trouvé.</div>'}</div>` : ''}
+        <div class="jrList">${al.journeys.map(j => journeyHTML(j, day.first, j === bestAller(al, day.first), 'au lycée')).join('') || '<div class="empty">Aucun trajet trouvé.</div>'}</div>` : ''}
       <div class="dayHead"><b>Retour ${dayLbl}</b><span>fin des cours à ${fmtTime(day.last)}, vers ${HOMES[homeBack]}${homeBack !== home ? ' (changement de semaine)' : ''}</span></div>
-      <div class="jrList">${re.journeys.map((j, i) => journeyHTML(j, null, !al && i === 0)).join('') || '<div class="empty">Aucun trajet trouvé.</div>'}</div>
-      <div class="small muted" style="margin-top:16px">Horaires et temps réel : Île-de-France Mobilités. Touche un trajet pour voir le détail.</div>`;
+      <div class="jrList">${re.journeys.map((j, i) => journeyHTML(j, null, !al && i === 0, 'chez toi')).join('') || '<div class="empty">Aucun trajet trouvé.</div>'}</div>
+      <div class="small muted" style="margin-top:16px">Horaires et temps réel : Île-de-France Mobilités. Touche un bus pour voir où monter et où descendre.</div>`;
     if (W.dataset.sig === html) return; W.dataset.sig = html; W.innerHTML = html;
     fillRealtime(W);
     W.querySelectorAll('details.jr').forEach(d => d.ontoggle = () => { if (d.open) fillRealtime(d); });
@@ -709,25 +719,26 @@ let busHomeSig = '';
 async function busHome() {
   const box = $('#busHome'); if (!box) return;
   const now = new Date(), day = busDay(now);
-  if (!day || day.i !== 0 || !settings.bus) { box.innerHTML = ''; return; }
-  const morning = now < day.first && day.first - now < 3 * 36e5, after = now > new Date(day.last - 45 * 6e4) && now < new Date(day.last.getTime() + 90 * 6e4);
-  if (!morning && !after) { box.innerHTML = ''; return; }
+  if (!day) { box.innerHTML = ''; return; }
+  if (!settings.bus) { box.innerHTML = `<button class="card busCard" id="busCardBtn"><div class="bcTop"><span>Bus</span></div><div class="bcMain"><b>Où es-tu cette semaine ?</b></div><small>Choisis Ponthévrard ou Saint-Arnoult pour voir tes bus ici.</small></button>`; $('#busCardBtn').onclick = () => go('bus'); return; }
+  const morning = now < day.first; // avant les cours (aujourd'hui ou un prochain jour) : l'aller ; sinon : le retour
+  const when = day.i === 0 ? '' : day.i === 1 ? ' demain' : ' ' + day.d.toLocaleDateString('fr-FR', { weekday: 'long' });
   try {
     const T = await busTrips(day); const L = morning ? T.aller : T.retour; if (!L) return;
     const J = L.journeys.filter(j => minsTo(j.dep) >= -1);
     const j = morning ? bestAller({ journeys: J }, day.first) : J[0];
     if (!j) { box.innerHTML = ''; return; }
-    const f = firstPt(j), m = minsTo(j.dep), sig = j.dep + m;
+    const P = tripPlan(j); if (!P) return;
+    const f = P.legs[0], m = Math.round((P.board - Date.now()) / 6e4), sig = j.dep + j.arr + m + when;
     if (sig === busHomeSig && box.innerHTML) return; busHomeSig = sig;
-    box.innerHTML = `<button class="card busCard${m <= 10 ? ' hot' : ''}" id="busCardBtn">
-      <div class="bcTop"><span>${morning ? (j.habit ? 'Ton bus habituel pour le lycée' : 'Bus pour le lycée') : `Bus pour ${HOMES[T.homeBack]}`}</span><b>${inMin(m)}</b></div>
-      <div class="bcMain"><b>Pars à ${fmtTime(j.dep)}</b>${f ? lineChip(f.line) : ''}</div>
-      <small>${f ? `Arrêt ${esc(f.from)}, bus à ${fmtTime(f.dep)}. ` : ''}Arrivée ${fmtTime(j.arr)}${morning && new Date(j.arr) > day.first ? `, après le début du cours (${fmtTime(day.first)})` : ''}.</small></button>`;
+    const rest = P.legs.slice(1).map(x => `puis ${lineChip(x.line)} à ${esc(x.from)}`).join(' ');
+    box.innerHTML = `<button class="card busCard${m >= 0 && m <= 10 ? ' hot' : ''}" id="busCardBtn">
+      <div class="bcTop"><span>${morning ? `Bus pour le lycée${when}` : `Bus pour rentrer à ${HOMES[T.homeBack]}`}</span><b>${m >= 0 && m < 720 ? inMin(m) : ''}</b></div>
+      <div class="bcMain">${lineChip(f.line)}<b>${fmtTime(f.dep)}</b><span>à l'arrêt ${esc(f.from)}</span></div>
+      <small>${rest ? rest + ', ' : ''}arrivée ${fmtTime(P.arr)}${morning && P.arr > day.first ? ` <em>(cours à ${fmtTime(day.first)})</em>` : ''}</small></button>`;
     $('#busCardBtn').onclick = () => go('bus');
   } catch { box.innerHTML = ''; }
 }
-
-
 /* ---------- Trajets demandés à l'assistant ---------- */
 function busCtx() {
   if (!settings.bus) return '\nTRANSPORT : lieu de la semaine pas encore choisi (onglet Bus).';
@@ -757,18 +768,19 @@ async function tripAnswer(t) {
     const r = await busCall('journeys', { from, to, datetime: navDT(when), represents: arrival ? 'arrival' : 'departure', count: 4 }, 60e3);
     if (!r.journeys.length) return `Aucun trajet en transports trouvé de **${r.from}** à **${r.to}** ${arrival ? 'pour arriver avant' : 'à partir de'} ${fmtTime(when)}${sameDay(when, new Date()) ? '' : ' ' + fmtDay(when)}.`;
     const J = r.journeys, best = arrival ? (J.filter(j => new Date(j.arr) <= when).pop() || J[0]) : J.find(j => new Date(j.dep) >= new Date(when.getTime() - 6e4)) || J[0];
-    const day = sameDay(best.dep, new Date()) ? '' : ` (${fmtDay(new Date(best.dep))})`;
-    const steps = best.sections.map(x => {
-      if (x.type === 'pt') return `- ${fmtTime(x.dep)} : ${x.line?.mode ? x.line.mode.toLowerCase() : 'bus'} **${x.line?.code || ''}**${x.line?.direction ? ` direction ${x.line.direction}` : ''}, depuis **${x.from}**. Descends à **${x.to}** à ${fmtTime(x.arr)}`;
-      if (x.type === 'walk' && x.duration >= 60) return `- ${fmtTime(x.dep)} : marche ${Math.round(x.duration / 60)} min jusqu'à ${x.to}`;
-      if (x.type === 'waiting' && x.duration >= 120) return `- attente ${Math.round(x.duration / 60)} min`;
-      return '';
-    }).filter(Boolean).join('\n');
-    const m = minsTo(best.dep), soon = m >= 0 && m < 120 ? ` (${inMin(m)})` : '';
-    const others = J.filter(j => j !== best).slice(0, 3).map(j => `${fmtTime(j.dep)} → ${fmtTime(j.arr)}`).join(', ');
-    const late = arrival && new Date(best.arr) > when ? `\n\n> Aucun trajet n'arrive avant ${fmtTime(when)} : c'est le premier possible.` : '';
+    const P = tripPlan(best), f = P.legs[0];
+    const day = sameDay(best.dep, new Date()) ? '' : ` ${fmtDay(new Date(best.dep))}`;
+    const toTxt = typeof to === 'string' ? (to === 'lycee' ? 'au lycée' : 'chez toi') : 'à ' + r.to;
+    const steps = [
+      P.walkBefore >= 3 ? `${P.walkBefore} min à pied jusqu'à l'arrêt **${f.from}** (pars à ${fmtTime(P.leave)})` : '',
+      ...P.legs.map((x, k) => `${k ? `Descends à **${P.legs[k - 1].to}** et prends le` : 'Prends le'} **${x.line?.code || 'bus'}** à **${fmtTime(x.dep)}**${k ? '' : ` à l'arrêt **${x.from}**`}${x.line?.direction ? ` (direction ${x.line.direction})` : ''}`),
+      `Descends à **${P.legs.at(-1).to}**${P.walkAfter >= 1 ? `, puis ${P.walkAfter} min à pied` : ''} : arrivée ${toTxt} à **${fmtTime(P.arr)}**`,
+    ].filter(Boolean).map((x, i) => `${i + 1}. ${x}`).join('\n');
+    const m = Math.round((P.board - Date.now()) / 6e4), soon = m >= 0 && m < 120 ? ` (${inMin(m)})` : '';
+    const others = J.filter(j => j !== best).slice(0, 3).map(j => { const q = tripPlan(j); return q ? `${fmtTime(q.legs[0].dep)} (arrivée ${fmtTime(q.arr)})` : ''; }).filter(Boolean).join(', ');
+    const late = arrival && P.arr > when ? `\n\n> Aucun bus n'arrive avant ${fmtTime(when)} : c'est le premier possible.` : '';
     const dis = (r.disruptions || []).filter(d => d.text).slice(0, 1).map(d => `\n\n> Perturbation : ${d.text.slice(0, 220)}`).join('');
-    return `#### Départ ${fmtTime(best.dep)}${soon}, arrivée ${fmtTime(best.arr)}${day}\nDe **${r.from}** à **${r.to}**, ${best.transfers ? best.transfers + ' correspondance' + (best.transfers > 1 ? 's' : '') : 'direct'}.\n${steps}${late}${others ? `\n\nAutres options : ${others}.` : ''}${dis}`;
+    return `#### ${f.line?.code || 'Bus'} à ${fmtTime(f.dep)}${day}${soon}\n${steps}${late}${others ? `\n\nAutres bus : ${others}.` : ''}${dis}`;
   } catch (e) { return e.message && !/fetch|network/i.test(e.message) ? e.message : 'Impossible de calculer le trajet pour le moment, réessaie.'; }
 }
 
