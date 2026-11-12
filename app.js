@@ -324,10 +324,13 @@ Le message peut être :
 - un AJOUT (ex : « exposé à rendre vendredi », « sortir les poubelles chaque lundi », « rappelle-moi d'appeler le dentiste jeudi ») → intent "add" avec la ou les tâches ;
 - une QUESTION ou une demande de conseil (ex : « qu'est-ce que je fais ce soir ? », « organise ma semaine ») → intent "chat" ;
 - une demande de marquer quelque chose comme fait → intent "done" avec les id entre crochets ;
+- une QUESTION DE COURS, une demande d'explication, d'aide sur un exercice ou de révision (ex : « explique-moi le discriminant », « c'est quoi le prétérit », « aide-moi sur l'exo 3 », « comment on calcule une moyenne pondérée ») → intent "cours" (laisse "reply" vide, un prof spécialisé répondra) ;
+- une demande de FICHE de révision (ex : « fais-moi une fiche sur la forme canonique ») → intent "fiche" avec "study":{"subject":"matière ou null","topic":"sujet"} ;
+- une demande d'être INTERROGÉ ou de QUIZ (ex : « interroge-moi sur l'allemand », « quiz sur la Boétie ») → intent "quiz" avec "study":{"subject":"matière ou null","topic":"sujet ou null"} ;
 - une demande de MODIFIER, DÉCALER ou SUPPRIMER (ex : « décale tout à demain », « mets le dentiste à 17h », « supprime le rappel poubelles », « renomme X ») → intent "edit" : "edits" liste les changements [{"id":"…","due":"YYYY-MM-DD","time":"HH:MM"|null,"title":"…"}] (ne mets que les champs qui changent ; "time":null enlève l'heure) et "remove" les id à supprimer. « tout » = toutes les tâches concernées de la liste ci-dessous. Les devoirs Pronote (id qui commence par pn:) et les révisions (rv:) ne peuvent être ni décalés ni supprimés : dis-le dans "reply" et propose de les marquer faits.
 Pour "chat", "reply" est une VRAIE réponse complète et utile, pas une phrase d'introduction : par exemple pour « organise ma semaine », donne le plan jour par jour (lundi, mardi…) en t'appuyant sur ses cours, devoirs, tâches et agenda ci-dessous, avec des créneaux concrets (ex : « 17h30-18h15 : exo de maths ») et les priorités. Mets en forme pour un téléphone : phrases courtes, un petit titre par jour ou par partie (ex : « Lundi : » seul sur sa ligne), des tirets « - » pour les listes, **gras** pour l'essentiel (matière, priorité), horaires au format 17h30-18h15. Pas de tableau, pas de #. Pour "add", "done" et "edit", "reply" est une phrase courte qui dit ce que tu as fait.
 Dates : une date sans année = la PROCHAINE occurrence. « avant le X » = date limite X. Répétition : daily, weekdays, weekly, biweekly, monthly ou null.
-Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done"|"edit","reply":"ta réponse","tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"],"edits":[],"remove":[]}`;
+Réponds UNIQUEMENT en JSON : {"intent":"add"|"chat"|"done"|"edit"|"cours"|"fiche"|"quiz","reply":"ta réponse","study":null,"tasks":[{"title":"titre court, majuscule, sans la date","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"kind":"tache"|"devoir"|"rdv","subject":null,"repeat":null,"note":null}],"done":["id"],"edits":[],"remove":[]}`;
 function taskFrom(x, source) {
   const t = { id: uid(), title: cap(String(x.title || '').trim()) || 'Sans titre', due: x.due || null, time: x.time || null, kind: ['tache', 'devoir', 'rdv'].includes(x.kind) ? x.kind : 'tache', subject: x.subject || null, repeat: REPEATS[x.repeat] ? x.repeat || null : null, note: x.note || null, done: false, createdAt: new Date().toISOString(), source };
   if (t.repeat && !t.due) t.due = ymd(new Date());
@@ -336,7 +339,7 @@ function taskFrom(x, source) {
 }
 async function agent(text, history = []) {
   const r = await aiJSON({ system: AGENT_RULES + '\n\n' + snapshotCtx(), messages: [...history.slice(-10), { role: 'user', content: text }] });
-  return { intent: r.intent || (r.tasks?.length ? 'add' : 'chat'), reply: String(r.reply || ''), tasks: Array.isArray(r.tasks) ? r.tasks.filter(x => x && x.title) : [], done: Array.isArray(r.done) ? r.done : [], edits: Array.isArray(r.edits) ? r.edits.filter(x => x && x.id) : [], remove: Array.isArray(r.remove) ? r.remove.map(String) : [] };
+  return { intent: r.intent || (r.tasks?.length ? 'add' : 'chat'), reply: String(r.reply || ''), tasks: Array.isArray(r.tasks) ? r.tasks.filter(x => x && x.title) : [], done: Array.isArray(r.done) ? r.done : [], edits: Array.isArray(r.edits) ? r.edits.filter(x => x && x.id) : [], remove: Array.isArray(r.remove) ? r.remove.map(String) : [], study: r.study && typeof r.study === 'object' ? r.study : {} };
 }
 // Applique les modifications demandées à l'IA ; renvoie un résumé lisible.
 function applyEdits(a) {
@@ -396,6 +399,7 @@ $('#capForm').addEventListener('submit', async e => {
     if (server.flags?.ai) {
       let a = null;
       try { a = await withTimeout(agent(text, chat), 50000); } catch (err) { a = null; }
+      if (a && ['cours', 'fiche', 'quiz'].includes(a.intent)) { $('#capIn').value = ''; toggleCapture(false); go('ia'); ask(text, a); return; }
       if (a && a.intent === 'chat') { $('#capIn').value = ''; toggleCapture(false); chat.push({ role: 'user', content: text }, { role: 'assistant', content: a.reply || "Je n'ai pas compris, reformule ?", q: text }); saveChat(); if ($('#chatList')) paintChat(); go('ia'); return; }
       if (a && a.intent === 'done' && a.done.length) { $('#capIn').value = ''; toggleCapture(false); for (const id of a.done) { const t = allItems().find(x => x.id === id); if (t) completeTask(t, true); } return; }
       if (a && a.intent === 'edit' && (a.edits.length || a.remove.length)) { $('#capIn').value = ''; toggleCapture(false); const n = applyEdits(a); toast('C\'est fait', (a.reply || n.join(' ')).replace(/\*\*/g, '').slice(0, 120)); return; }
@@ -953,48 +957,68 @@ function fmtMsg(txt) {
 }
 const AI_AV = `<span class="aiAv">${SVG('<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>')}</span>`;
 function msgHTML(m, i) {
-  if (m.role === 'user') return `<div class="msg u">${esc(m.content)}</div>`;
-  return `<div class="msgRow">${AI_AV}<div class="msg a${m.err ? ' err' : ''}">${fmtRich(m.content)}${m.err ? '' : `<div class="msgAct"><button data-copy="${i}">Copier</button>${m.q ? `<button data-redo="${i}">Autre réponse</button>` : ''}</div>`}</div></div>`;
+  if (m.role === 'user') return `<div class="msg u">${m.imgs ? `<div class="uImgs">${m.imgs.map(d => `<img src="data:image/jpeg;base64,${d}" alt="">`).join('')}</div>` : ''}${esc(m.content)}</div>`;
+  return `<div class="msgRow">${AI_AV}<div class="msg a${m.err ? ' err' : ''}">${fmtRich(m.content)}${m.err ? '' : `<div class="msgAct"><button data-copy="${i}">Copier</button>${m.q ? `<button data-redo="${i}">Autre réponse</button>` : ''}${m.rich ? `<button data-mkfiche="${i}">En faire une fiche</button>` : ''}</div>`}</div></div>`;
+}
+const IA_ACTIONS = [['soir', 'Ma soirée', 'quoi faire ce soir'], ['semaine', 'Ma semaine', 'organisée jour par jour'], ['fiche', 'Faire une fiche', 'synthèse + schéma'], ['quiz', "M'interroger", 'quiz de 8 questions'], ['photo', 'Exercice en photo', 'il te guide pas à pas'], ['ex', "M'expliquer", 'une notion du cours']];
+function helloHTML() {
+  const name = server.me?.name && server.me.name !== 'Invité' ? server.me.name : '';
+  const fs = fiches.slice(0, 8);
+  return `<div class="chatHello">${AI_AV}<h3>Salut${name ? ' ' + esc(name) : ''} 👋</h3><p>Je m'occupe de ton <b>organisation</b> (ajouter, décaler, planifier) et de tes <b>révisions</b> (explications avec schémas, aide sur un exercice en photo, fiches, quiz). Je connais tes cours, devoirs, notes et ton cahier de textes.</p>
+    <div class="stGrid">${IA_ACTIONS.map(([k, t, d]) => `<button data-st="${k}"><b>${t}</b><span>${d}</span></button>`).join('')}</div>
+    ${fs.length ? `<div class="dayHead" style="margin-top:6px"><b>Mes fiches</b><span class="n">${fiches.length}</span></div><div class="fStrip">${fs.map(f => `<button class="fChip" data-fiche="${f.id}">${subjBadge(f.subject || f.title, 'sq mini')}<span><b>${esc(f.title)}</b><small>${esc(f.subject || '')}${f.score != null ? ' · quiz ' + f.score + '/8' : ''}</small></span></button>`).join('')}</div>` : ''}</div>`;
 }
 function paintChat(stick = true) {
   const L = $('#chatList'); if (!L) return;
   const atBottom = L.scrollHeight - L.scrollTop - L.clientHeight < 80;
-  L.innerHTML = (chat.length ? '' : `<div class="chatHello">${AI_AV}<h3>Salut${server.me?.name && server.me.name !== 'Invité' ? ' ' : ''}${esc(server.me?.name && server.me.name !== 'Invité' ? server.me.name : '')} 👋</h3><p>Écris-moi comme tu veux : « exposé à rendre vendredi » pour <b>ajouter</b> un truc, ou « qu'est-ce que je fais ce soir ? » pour un <b>conseil</b>. Je connais tes cours, devoirs et rappels.</p></div>`)
+  L.innerHTML = (chat.length ? '' : helloHTML())
     + chat.map(msgHTML).join('')
     + (asking ? `<div class="msgRow">${AI_AV}<div class="msg a think"><i></i><i></i><i></i></div></div>` : '');
+  enhance(L);
   $('#iaSugg').hidden = chat.length > 0 || asking;
   $('#iaNew').hidden = !chat.length;
   const inp = $('#chatIn'), btn = $('#chatF button:last-child'); if (inp) { inp.disabled = asking; btn.disabled = asking; }
-  enhance(L);
   if (stick || atBottom) requestAnimationFrame(() => { const last = L.querySelector('.msgRow:last-child, .msg.u:last-child'); if (last && last.offsetHeight > L.clientHeight * .7 && !asking && chat.at(-1)?.role === 'assistant') L.scrollTop = last.offsetTop - 10; else L.scrollTop = L.scrollHeight; });
+}
+const IA_SUGG2 = [['Ce soir', "Qu'est-ce que je dois faire ce soir ?"], ['Ma semaine', 'Organise ma semaine'], ['Fiche', '#fiche'], ['Quiz', '#quiz'], ['Photo', '#photo'], ['Mes fiches', '#list'], ['En retard', "Qu'est-ce qui est en retard ?"]];
+function iaAction(k) {
+  const inp = $('#chatIn');
+  if (k === 'fiche') ficheSheet(); else if (k === 'quiz') quizSheet(); else if (k === 'photo') $('#stFile').click(); else if (k === 'list') fichesSheet();
+  else if (k === 'ex') { inp.value = 'Explique-moi '; inp.focus(); }
+  else if (k === 'soir') ask("Qu'est-ce que je dois faire ce soir ?"); else if (k === 'semaine') ask('Organise ma semaine');
 }
 function rAI(force) {
   const v = $('#v-ia');
   if (!server.flags?.ai) { v.classList.remove('iaV'); v.innerHTML = `<div class="chatwrap"><div class="msg a">Pour discuter avec moi, ajoute une clé IA gratuite dans Réglages (Groq, 1 minute).</div><button class="btn p" id="goSet" style="align-self:flex-start">Ouvrir les réglages</button></div>`; $('#goSet').onclick = openSettings; return; }
-  if (iaMode === 'reviser') return rStudy(force);
   if ($('#chatList') && !force) return; // déjà affiché : on ne reconstruit pas (garde le défilement et la saisie)
   v.classList.add('iaV');
-  v.innerHTML = `<div class="iaTop">${iaSeg()}<button class="btn" id="iaNew" hidden>Nouvelle conv.</button></div>
+  v.innerHTML = `<div class="iaTop"><div><span class="liveDot"></span><span>Organisation & révisions · connaît ton planning</span></div><button class="btn" id="iaNew" hidden>Nouvelle conv.</button></div>
     <div class="chatList" id="chatList"></div>
     <div class="iaBottom">
-      <div class="sugg" id="iaSugg">${IA_SUGG.map(([l, q]) => `<button data-q="${esc(q)}">${l}</button>`).join('')}</div>
-      <form class="chatin" id="chatF"><textarea id="chatIn" rows="1" placeholder="Écris ou dicte…" aria-label="Message" enterkeyhint="send"></textarea><button type="button" class="mic" id="chatMic" aria-label="Dicter">${MIC_SVG}</button><button aria-label="Envoyer">${SVG('<path d="M5 12h14M13 6l6 6-6 6"/>')}</button></form>
+      <div class="sugg" id="iaSugg">${IA_SUGG2.map(([l, q]) => `<button data-q="${esc(q)}">${l}${q === '#list' && fiches.length ? ' · ' + fiches.length : ''}</button>`).join('')}</div>
+      <div class="stImgs" id="stImgs"></div>
+      <form class="chatin" id="chatF"><button type="button" class="mic" id="chatCam" aria-label="Ajouter une photo">${SVG('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>')}</button><textarea id="chatIn" rows="1" placeholder="Écris ou dicte…" aria-label="Message" enterkeyhint="send"></textarea><button type="button" class="mic" id="chatMic" aria-label="Dicter">${MIC_SVG}</button><button aria-label="Envoyer">${SVG('<path d="M5 12h14M13 6l6 6-6 6"/>')}</button></form>
+      <input type="file" id="stFile" accept="image/*" multiple hidden>
     </div>`;
   const inp = $('#chatIn');
   const grow = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px'; };
   inp.oninput = grow;
   inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(max-width:899px)').matches) { e.preventDefault(); $('#chatF').requestSubmit(); } };
-  $('#chatF').onsubmit = e => { e.preventDefault(); const q = inp.value.trim(); if (q) { inp.value = ''; grow(); ask(q); } };
-  v.querySelectorAll('#iaSugg button').forEach(b => b.onclick = () => ask(b.dataset.q));
+  $('#chatF').onsubmit = e => { e.preventDefault(); const q = inp.value.trim(); if (q || stImgs.length) { inp.value = ''; grow(); ask(q); } };
+  v.querySelectorAll('#iaSugg button').forEach(b => b.onclick = () => b.dataset.q.startsWith('#') ? iaAction(b.dataset.q.slice(1)) : ask(b.dataset.q));
   $('#iaNew').onclick = () => { chat = []; saveChat(); paintChat(); };
-  bindIaSeg();
   $('#chatMic').onclick = e => toggleVoice(e.currentTarget, inp);
+  $('#chatCam').onclick = () => $('#stFile').click();
+  $('#stFile').onchange = async e => { for (const f of [...e.target.files].slice(0, 4 - stImgs.length)) stImgs.push({ mime: 'image/jpeg', data: await shrinkImg(f) }); e.target.value = ''; paintImgs(); if (!inp.value) inp.placeholder = 'Que veux-tu savoir sur cette photo ?'; inp.focus(); };
   $('#chatList').onclick = e => {
-    const c = e.target.closest('[data-copy]'), r = e.target.closest('[data-redo]');
+    const st = e.target.closest('[data-st]'); if (st) return iaAction(st.dataset.st);
+    const f = e.target.closest('[data-fiche]'); if (f) return openFiche(f.dataset.fiche);
+    const c = e.target.closest('[data-copy]'), r = e.target.closest('[data-redo]'), mk = e.target.closest('[data-mkfiche]');
     if (c) { navigator.clipboard?.writeText(chat[+c.dataset.copy].content).then(() => toast('Copié', ''), () => {}); }
     if (r && !asking) { const i = +r.dataset.redo, q = chat[i].q; chat.splice(i - 1, 2); ask(q); }
+    if (mk) { const i = +mk.dataset.mkfiche; makeFiche({ topic: (chat[i - 1]?.content || '').slice(0, 300), extra: chat[i].content }); }
   };
-  paintChat();
+  paintImgs(); paintChat(); loadFiches();
   if (!matchMedia('(max-width:899px)').matches) inp.focus();
 }
 function snapshotCtx() {
@@ -1058,13 +1082,9 @@ function enhance(root) {
 }
 
 /* ================= Mode Réviser : prof perso, fiches, quiz, photo d'exercice ================= */
-let iaMode = store.get('orbit.iaMode', 'orga');
-let tutor = store.get('orbit.tutor', []), studying = false, stImgs = [];
+let stImgs = [];
 let fiches = store.get('orbit.fiches', []);
-const saveTutor = () => store.set('orbit.tutor', tutor.slice(-30));
-const iaSeg = () => `<div class="seg iaSeg" id="iaSeg"><div class="pill"></div><button data-m="orga" class="${iaMode === 'orga' ? 'on' : ''}">Organisation</button><button data-m="reviser" class="${iaMode === 'reviser' ? 'on' : ''}">Réviser</button></div>`;
-function bindIaSeg() { segPill('#iaSeg'); document.querySelectorAll('#iaSeg button').forEach(b => b.onclick = () => { iaMode = b.dataset.m; store.set('orbit.iaMode', iaMode); rAI(true); }); }
-async function loadFiches() { try { const r = await extra('fiches'); if (Array.isArray(r.fiches)) { fiches = r.fiches; store.set('orbit.fiches', fiches); if (current === 'ia' && iaMode === 'reviser' && !tutor.length) paintStudy(false); } } catch { } }
+async function loadFiches() { try { const r = await extra('fiches'); if (Array.isArray(r.fiches)) { const ch = JSON.stringify(r.fiches) !== JSON.stringify(fiches); fiches = r.fiches; store.set('orbit.fiches', fiches); if (ch && current === 'ia' && !chat.length && !asking) paintChat(false); } } catch { } }
 async function studyCall(body) {
   const r = await withTimeout(extra('study', body), body.mode === 'chat' ? 70000 : 125000);
   if (!r.ok) { const e = new Error(r.error || 'erreur'); e.code = r.error === 'no_key' ? 'no_key' : /rate|429|limit/i.test(r.error || '') ? 'rate_limited' : ''; throw e; }
@@ -1080,65 +1100,9 @@ function studyCtx(subject) {
   if (notes && !sub) parts.push(notesCtx());
   return parts.join('\n');
 }
-const STUDY_SUGG = [['Fiche', 'fiche'], ['Quiz', 'quiz'], ['Photo d\'exercice', 'photo'], ['Mes fiches', 'list']];
-function rStudy(force) {
-  const v = $('#v-ia');
-  if ($('#stList') && !force) return;
-  v.classList.add('iaV');
-  v.innerHTML = `<div class="iaTop">${iaSeg()}<button class="btn" id="stNew" hidden>Effacer</button></div>
-    <div class="chatList" id="stList"></div>
-    <div class="iaBottom">
-      <div class="sugg" id="stSugg">${STUDY_SUGG.map(([l, k]) => `<button data-k="${k}">${l}${k === 'list' && fiches.length ? ` · ${fiches.length}` : ''}</button>`).join('')}</div>
-      <div class="stImgs" id="stImgs"></div>
-      <form class="chatin" id="stF"><button type="button" class="mic" id="stCam" aria-label="Ajouter une photo">${SVG('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>')}</button><textarea id="stIn" rows="1" placeholder="Ta question de cours…" aria-label="Question" enterkeyhint="send"></textarea><button type="button" class="mic" id="stMic" aria-label="Dicter">${MIC_SVG}</button><button aria-label="Envoyer">${SVG('<path d="M5 12h14M13 6l6 6-6 6"/>')}</button></form>
-      <input type="file" id="stFile" accept="image/*" multiple hidden>
-    </div>`;
-  bindIaSeg();
-  const inp = $('#stIn'), grow = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px'; };
-  inp.oninput = grow;
-  inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(max-width:899px)').matches) { e.preventDefault(); $('#stF').requestSubmit(); } };
-  $('#stF').onsubmit = e => { e.preventDefault(); const q = inp.value.trim(); if (q || stImgs.length) { inp.value = ''; grow(); askTutor(q || 'Aide-moi sur cet exercice (photo).'); } };
-  $('#stMic').onclick = e => toggleVoice(e.currentTarget, inp);
-  $('#stCam').onclick = () => $('#stFile').click();
-  $('#stFile').onchange = async e => { for (const f of [...e.target.files].slice(0, 4 - stImgs.length)) stImgs.push({ mime: 'image/jpeg', data: await shrinkImg(f) }); e.target.value = ''; paintImgs(); inp.focus(); };
-  $('#stNew').onclick = () => { tutor = []; saveTutor(); paintStudy(); };
-  v.querySelectorAll('#stSugg button').forEach(b => b.onclick = () => { const k = b.dataset.k; if (k === 'fiche') ficheSheet(); else if (k === 'quiz') quizSheet(); else if (k === 'photo') $('#stFile').click(); else fichesSheet(); });
-  $('#stList').onclick = e => {
-    const f = e.target.closest('[data-fiche]'); if (f) return openFiche(f.dataset.fiche);
-    const a = e.target.closest('[data-st]'); if (a) { const k = a.dataset.st; if (k === 'fiche') ficheSheet(); else if (k === 'quiz') quizSheet(); else if (k === 'photo') $('#stFile').click(); else if (k === 'ex') { inp.value = 'Explique-moi '; inp.focus(); } }
-    const c = e.target.closest('[data-copy]'); if (c) navigator.clipboard?.writeText(tutor[+c.dataset.copy].content).then(() => toast('Copié', ''), () => { });
-    const mk = e.target.closest('[data-mkfiche]'); if (mk) { const m = tutor[+mk.dataset.mkfiche]; makeFiche({ topic: (tutor[+mk.dataset.mkfiche - 1]?.content || '').slice(0, 300), extra: m.content }); }
-  };
-  paintImgs(); paintStudy(); loadFiches();
-}
 function paintImgs() { const w = $('#stImgs'); if (!w) return; w.innerHTML = stImgs.map((im, i) => `<span><img src="data:${im.mime};base64,${im.data}" alt=""><button data-rm="${i}" aria-label="Retirer">×</button></span>`).join(''); w.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { stImgs.splice(+b.dataset.rm, 1); paintImgs(); }); }
 function shrinkImg(file, max = 1600) {
   return new Promise((ok, ko) => { const img = new Image(); img.onload = () => { const k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); ok(c.toDataURL('image/jpeg', .85).split(',')[1]); URL.revokeObjectURL(img.src); }; img.onerror = ko; img.src = URL.createObjectURL(file); });
-}
-function paintStudy(stick = true) {
-  const L = $('#stList'); if (!L) return;
-  const fs = fiches.slice(0, 8);
-  L.innerHTML = (tutor.length ? '' : `<div class="chatHello">${AI_AV}<h3>Ton prof perso</h3><p>Explications claires avec schémas et formules, aide sur un exercice en photo (il te guide au lieu de tout faire), fiches de révision et quiz. Il connaît tes cours, ton cahier de textes et tes notes.</p>
-      <div class="stGrid"><button data-st="fiche"><b>Faire une fiche</b><span>synthèse + schéma</span></button><button data-st="quiz"><b>M'interroger</b><span>quiz de 8 questions</span></button><button data-st="photo"><b>Exercice en photo</b><span>il te guide pas à pas</span></button><button data-st="ex"><b>M'expliquer</b><span>une notion du cours</span></button></div>
-      ${fs.length ? `<div class="dayHead" style="margin-top:6px"><b>Mes fiches</b><span class="n">${fiches.length}</span></div><div class="fStrip">${fs.map(f => `<button class="fChip" data-fiche="${f.id}">${subjBadge(f.subject, 'sq mini')}<span><b>${esc(f.title)}</b><small>${esc(f.subject || '')}${f.score != null ? ' · quiz ' + f.score + '/8' : ''}</small></span></button>`).join('')}</div>` : ''}</div>`)
-    + tutor.map((m, i) => m.role === 'user' ? `<div class="msg u">${m.imgs ? `<div class="uImgs">${m.imgs.map(d => `<img src="data:image/jpeg;base64,${d}" alt="">`).join('')}</div>` : ''}${esc(m.content)}</div>`
-      : `<div class="msgRow">${AI_AV}<div class="msg a${m.err ? ' err' : ''}">${fmtRich(m.content)}${m.err ? '' : `<div class="msgAct"><button data-copy="${i}">Copier</button><button data-mkfiche="${i}">En faire une fiche</button></div>`}</div></div>`).join('')
-    + (studying ? `<div class="msgRow">${AI_AV}<div class="msg a think"><i></i><i></i><i></i></div></div>` : '');
-  enhance(L);
-  const n = $('#stNew'); if (n) n.hidden = !tutor.length;
-  const inp = $('#stIn'); if (inp) inp.disabled = studying;
-  if (stick) requestAnimationFrame(() => { const last = L.querySelector('.msgRow:last-child'); if (last && last.offsetHeight > L.clientHeight * .7 && !studying) L.scrollTop = last.offsetTop - 10; else L.scrollTop = L.scrollHeight; });
-}
-async function askTutor(q) {
-  if (studying) return; studying = true;
-  const imgs = stImgs.slice(); stImgs = []; paintImgs();
-  tutor.push({ role: 'user', content: q, ...(imgs.length ? { imgs: imgs.map(i => i.data).slice(0, 2) } : {}) });
-  paintStudy();
-  try {
-    const text = await studyCall({ mode: 'chat', messages: tutor.filter(m => !m.err).map(m => ({ role: m.role, content: m.content })), images: imgs, context: studyCtx('') });
-    tutor.push({ role: 'assistant', content: text });
-  } catch (e) { tutor.push({ role: 'assistant', err: true, content: e.code === 'no_key' ? 'Il faut une clé IA dans Réglages.' : e.code === 'rate_limited' ? 'Trop de demandes, réessaie dans une minute.' : 'Le prof n\'a pas pu répondre (' + (e.message || 'erreur') + '). Réessaie.' }); }
-  finally { studying = false; tutor.forEach(m => { if (m.imgs && m !== tutor.at(-2)) delete m.imgs; }); saveTutor(); if ($('#stList')) paintStudy(); }
 }
 function subjectChoices() {
   const S = new Set([...uniqueDevoirs().map(d => prettySubj(d.subject)), ...contenus.map(x => prettySubj(x.subject)), ...(notes?.subjects || []).map(x => subjParts(x.name).main), ...(server.cours || []).map(c => prettySubj(c.subject))].filter(Boolean));
@@ -1172,7 +1136,7 @@ async function makeFiche({ subject, topic, imgs = [], extra: more }) {
     const f = parseJSON(text); if (!f || !f.title) throw new Error('fiche illisible');
     f.id = 'f' + Date.now().toString(36); f.subject = subject || f.subject || ''; f.createdAt = new Date().toISOString(); f.topic = topic || '';
     fiches = [f, ...fiches].slice(0, 80); store.set('orbit.fiches', fiches); extra('fiche_save', { fiche: f }).catch(() => { });
-    ov.remove(); openFiche(f.id); if ($('#stList') && !tutor.length) paintStudy(false);
+    ov.remove(); openFiche(f.id); if ($('#chatList') && !chat.length) paintChat(false);
   } catch (e) { ov.remove(); toast('Fiche ratée', e.code === 'rate_limited' ? 'Trop de demandes, réessaie dans une minute' : 'Réessaie, ou précise le sujet'); }
 }
 function showOverlay(html) { const o = document.createElement('div'); o.className = 'ficheO'; o.innerHTML = `<div class="fBg2"></div><div class="fWrap">${html}</div>`; document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('on')); return o; }
@@ -1197,8 +1161,8 @@ function openFiche(id) {
   o.querySelector('#fxClose').onclick = close;
   o.querySelector('.fBg2').onclick = close;
   o.querySelector('#fxQuiz').onclick = () => { close(); runQuiz({ fiche: f }); };
-  o.querySelector('#fxAsk').onclick = () => { close(); iaMode = 'reviser'; store.set('orbit.iaMode', iaMode); go('ia'); rAI(true); const i = $('#stIn'); if (i) { i.value = `Sur ma fiche « ${f.title} » : `; i.focus(); } };
-  o.querySelector('#fxDel').onclick = () => { if (!confirmDel(o.querySelector('#fxDel'))) return; fiches = fiches.filter(x => x.id !== id); store.set('orbit.fiches', fiches); extra('fiche_del', { id }).catch(() => { }); close(); if ($('#stList')) paintStudy(false); toast('Fiche supprimée', f.title); };
+  o.querySelector('#fxAsk').onclick = () => { close(); go('ia'); const i = $('#chatIn'); if (i) { i.value = `Sur ma fiche « ${f.title} » : `; i.focus(); } };
+  o.querySelector('#fxDel').onclick = () => { if (!confirmDel(o.querySelector('#fxDel'))) return; fiches = fiches.filter(x => x.id !== id); store.set('orbit.fiches', fiches); extra('fiche_del', { id }).catch(() => { }); close(); if ($('#chatList') && !chat.length) paintChat(false); toast('Fiche supprimée', f.title); };
 }
 function confirmDel(btn) { if (btn.dataset.sure) return true; btn.dataset.sure = '1'; btn.textContent = 'Confirmer ?'; btn.classList.add('danger'); setTimeout(() => { delete btn.dataset.sure; btn.textContent = 'Supprimer'; btn.classList.remove('danger'); }, 3000); return false; }
 function fichesSheet() {
@@ -1263,12 +1227,28 @@ async function runQuiz({ fiche, subject, topic }) {
   };
   paint();
 }
-async function ask(q) {
-  if (asking || !q) return; asking = true;
-  chat.push({ role: 'user', content: q }); saveChat();
+// Questions de cours évidentes : on va directement au prof (une seule requête, plus rapide)
+const COURS_RE = /^(explique|c'?est quoi|qu'?est[- ]ce qu|comment (on |faire |calculer|résoudre|trouver|conjuguer)|pourquoi |aide[- ]moi (sur|à comprendre|pour l'exo|avec l'exo)|résous|calcule|définition|corrige[- ]moi|traduis)/i;
+async function ask(q, pre = null) {
+  if (asking || (!q && !stImgs.length)) return; asking = true;
+  const imgs = stImgs.slice(); stImgs = []; paintImgs();
+  q = q || 'Aide-moi sur cet exercice (photo).';
+  chat.push({ role: 'user', content: q, ...(imgs.length ? { imgs: imgs.map(i => i.data).slice(0, 2) } : {}) }); saveChat();
   if ($('#chatList')) paintChat(); else rAI(true);
   try {
-    const a = await withTimeout(agent(q, chat.slice(0, -1).filter(m => !m.err)), 55000);
+    const hist = () => chat.filter(m => !m.err).slice(-14).map(m => ({ role: m.role, content: m.content }));
+    const a = pre || (imgs.length || COURS_RE.test(q.trim()) ? { intent: 'cours' } : await withTimeout(agent(q, chat.slice(0, -1).filter(m => !m.err)), 55000));
+    if (a.intent === 'cours') {
+      const text = await studyCall({ mode: 'chat', messages: hist(), images: imgs, context: studyCtx('') });
+      chat.push({ role: 'assistant', content: text, rich: true });
+      return;
+    }
+    if (a.intent === 'fiche' || a.intent === 'quiz') {
+      const st = a.study || {}, subject = st.subject ? (prettySubj(st.subject) || st.subject) : null, topic = st.topic || (subject ? '' : q);
+      chat.push({ role: 'assistant', content: a.intent === 'fiche' ? `Je prépare ta fiche${subject ? ' de **' + subject + '**' : ''}${topic ? ' : ' + topic : ''}. Elle s'ouvrira toute seule et sera rangée dans **Mes fiches**.` : `C'est parti pour un quiz${subject ? ' de **' + subject + '**' : ''}${topic ? ' sur ' + topic : ''} : 8 questions avec la correction.` });
+      setTimeout(() => a.intent === 'fiche' ? makeFiche({ subject, topic }) : runQuiz({ subject, topic }), 50);
+      return;
+    }
     const notes = [];
     if (a.intent === 'add' && a.tasks.length) { const L = a.tasks.map(x => taskFrom(x, 'ia')); L.forEach(saveTask); notes.push(`✓ **Ajouté :**\n${L.map(t => '- ' + t.title + (t.due ? ' (' + dueLabel(t).toLowerCase() + ')' : '')).join('\n')}`); }
     if (a.edits.length || a.remove.length) notes.push(...applyEdits(a));
@@ -1276,7 +1256,7 @@ async function ask(q) {
     const head = (a.intent === 'add' || a.intent === 'edit') && notes.length ? '' : (a.reply || (notes.length ? '' : "Je n'ai pas compris, reformule ?"));
     chat.push({ role: 'assistant', content: [head, ...notes].filter(Boolean).join('\n\n'), q: a.intent === 'chat' ? q : undefined });
   } catch (e) { chat.push({ role: 'assistant', err: true, content: e.code === 'timeout' ? "L'IA met trop de temps à répondre. Réessaie dans un instant." : aiErr(e) }); }
-  finally { asking = false; saveChat(); if (current === 'ia') { if ($('#chatList')) paintChat(); else rAI(true); } }
+  finally { asking = false; chat.forEach(m => { if (m.imgs && m !== chat.at(-2)) delete m.imgs; }); saveChat(); if (current === 'ia') { if ($('#chatList')) paintChat(); else rAI(true); } }
 }
 function aiErr(e) {
   const c = String(e?.code || e?.message || '');
