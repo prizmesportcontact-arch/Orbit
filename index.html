@@ -10,6 +10,11 @@
 <meta name="apple-mobile-web-app-title" content="Orbit">
 <meta name="description" content="Orbit, organisation perso : tâches, rappels, devoirs Pronote, agenda et IA.">
 <title>Orbit</title>
+<link rel="canonical" href="https://prizmesportcontact-arch.github.io/Orbit/">
+<meta property="og:title" content="Orbit">
+<meta property="og:description" content="Organisation perso : cours, devoirs Pronote, tâches, bus et assistant IA.">
+<meta property="og:image" content="https://prizmesportcontact-arch.github.io/Orbit/icons/icon-512.png">
+<meta property="og:type" content="website">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -21,7 +26,7 @@
 <div class="app">
   <aside class="side"><div class="rail">
     <div class="brand" title="Orbit"></div>
-    <nav class="nav" id="sidenav" aria-label="Navigation"><div class="pill"></div></nav>
+    <nav class="nav" id="sidenav" aria-label="Navigation principale"><div class="pill"></div></nav>
     <div class="foot" id="status"></div>
   </div></aside>
   <main class="main">
@@ -52,12 +57,12 @@
     </div>
   </main>
 </div>
-<nav class="tabbar" id="tabbar" aria-label="Navigation"><div class="pill"></div></nav>
+<nav class="tabbar" id="tabbar" aria-label="Onglets"><div class="pill"></div></nav>
 <div class="scrim" id="scrim"></div>
-<div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
-<div class="toasts" id="toasts" aria-live="polite"></div>
-<div class="offline" id="offline">Hors ligne · les changements seront envoyés plus tard</div>
-<div class="gate" id="gate" hidden>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Panneau"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<div class="offline" id="offline" role="status">Hors ligne · les changements seront envoyés plus tard</div>
+<div class="gate" id="gate" role="region" aria-label="Connexion à Orbit" hidden>
   <form class="box" id="gateForm">
     <h1>Orbit<span style="color:var(--acc)">.</span></h1>
     <p>Entre ton code d'accès Orbit. Tu ne le feras qu'une fois par appareil.</p>
@@ -66,6 +71,6 @@
     <div class="err" id="gateErr"></div>
   </form>
 </div>
-<script src="app.js"></script>
+<script src="app.js" defer></script>
 </body>
 </html>

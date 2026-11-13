@@ -1572,7 +1572,7 @@ function openEditor(t, isNew = false) {
   const d = $('#eDel'); if (d) d.onclick = () => { closeSheet(); removeTask(t.id); toast('Supprimé', t.title); };
   $('#eX').onclick = closeSheet; openSheet();
 }
-function openSheet() { $('#scrim').classList.add('on'); $('#sheet').classList.add('on'); }
+function openSheet() { const sh = $('#sheet'); sh.setAttribute('aria-label', sh.querySelector('h2')?.textContent.trim() || 'Panneau'); $('#scrim').classList.add('on'); sh.classList.add('on'); }
 function closeSheet() { $('#scrim').classList.remove('on'); $('#sheet').classList.remove('on'); }
 $('#scrim').onclick = closeSheet;
 addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
