@@ -1763,6 +1763,7 @@ function boot() {
   addEventListener('online', () => pull()); addEventListener('offline', () => setOnline(false));
 }
 // Pas de zoom ni de défilement de toute la page sur téléphone (app installée)
-['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+document.addEventListener('touchmove', e => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
 if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 boot();

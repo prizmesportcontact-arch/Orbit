@@ -1,5 +1,5 @@
 // Orbit — service worker : l'app s'ouvre même sans réseau (les données se resynchronisent ensuite).
-const VERSION = 'orbit-v33';
+const VERSION = 'orbit-v34';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png', 'icons/favicon.svg', 'vendor/fonts/schibsted-grotesk-latin-wght-normal.woff2'];
 
 self.addEventListener('install', e => {

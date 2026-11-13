@@ -24,7 +24,8 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--font);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum" 0}
 body{overflow:hidden;position:fixed;inset:0;width:100%;overscroll-behavior:none}
-html{overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+*{touch-action:pan-x pan-y}
+html{overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .view{overflow-x:hidden;overscroll-behavior:contain}
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}
