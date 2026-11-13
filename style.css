@@ -23,7 +23,9 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--font);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum" 0}
-body{overflow:hidden}
+body{overflow:hidden;position:fixed;inset:0;width:100%;overscroll-behavior:none}
+html{overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+.view{overflow-x:hidden;overscroll-behavior:contain}
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:var(--r1)}
@@ -150,7 +152,7 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none;color:var(--tx
 .card{background:var(--s1);border-radius:var(--r3);padding:20px}
 .card h3{font-size:16px;font-weight:700;color:var(--txt);margin-bottom:12px;display:flex;align-items:center;gap:8px;letter-spacing:-.01em}
 .card h3 .sp{flex:1}
-.empty{color:var(--mut);font-size:14px;padding:22px 18px;text-align:center;border-radius:var(--r2);background:var(--s1)}
+.empty{color:var(--mut);font-size:14px;padding:18px;text-align:left;border-radius:var(--r2);background:var(--s1)}
 .card .empty{background:var(--s2)}
 
 /* Listes groupées : une surface, des lignes séparées par un filet */
@@ -676,7 +678,7 @@ pre.code{white-space:pre-wrap;font-size:14px;background:var(--s2);padding:10px 1
 .busCard .lnChip{height:26px;font-size:14px}
 .busCard small{font-size:14px;color:var(--mut)}
 #busHome:empty{display:none}
-@media (max-width:699px){.jr summary{gap:12px;padding:12px 14px}.jrT{width:64px}.jrT b{font-size:22px}.jrIn{display:none}.tabbar button,.tabbar .plus{width:50px}.tabbar .pill{width:50px}}
+@media (max-width:699px){.jr summary{gap:12px;padding:12px 14px}.jrT{width:64px}.jrT b{font-size:22px}.jrIn{display:none}.tabbar{justify-content:space-between;padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}.tabbar button,.tabbar .plus{width:48px}.tabbar .pill{width:48px}#iaBtn{display:none!important}}
 body.glass :is(.jr,.busCard){position:relative;background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.05) 38%,rgba(255,255,255,.02) 62%,rgba(255,255,255,.08))!important;-webkit-backdrop-filter:blur(26px) saturate(220%);backdrop-filter:blur(26px) saturate(220%);box-shadow:inset 0 1.5px 1px -.5px rgba(255,255,255,.7),inset 0 0 22px rgba(255,255,255,.06)}
 /* ---------- Tablette (rail d'icônes, une colonne large) ---------- */
 @media (max-width:1100px){
@@ -692,17 +694,17 @@ body.glass :is(.jr,.busCard){position:relative;background:linear-gradient(135deg
   .app{grid-template-columns:1fr}
   .side{display:none}
   .mobOnly{display:grid}
-  .top{padding:calc(14px + var(--safeT)) 20px 2px;align-items:flex-start}
+  .top{padding:calc(14px + var(--safeT)) 18px 2px;align-items:flex-start}
   .top h1{font-size:26px}
   .top.big h1{font-size:36px;letter-spacing:-.04em}
   .top .sub{font-size:14px;margin-top:6px}
   .ribbon{margin-top:12px}
   body.onIA .ribbon{display:none}
-  .capture{margin:0 16px;max-height:0;overflow:hidden;opacity:0;transition:max-height .35s var(--ease),opacity .25s,margin .3s}
-  body.capOpen .capture{max-height:440px;opacity:1;margin:12px 16px 6px}
+  .capture{margin:0 18px;max-height:0;overflow:hidden;opacity:0;transition:max-height .35s var(--ease),opacity .25s,margin .3s}
+  body.capOpen .capture{max-height:440px;opacity:1;margin:12px 18px 6px}
   .capture .go span{display:none}
   .capture .go{padding:0 14px}
-  .view{padding:14px 16px calc(120px + var(--safeB))}
+  .view{padding:14px 18px calc(120px + var(--safeB))}
   .grid{grid-template-columns:1fr;gap:12px}
   .view>.today{gap:20px}
   .view>.today .colA{gap:20px}
@@ -741,7 +743,7 @@ body.glass :is(.jr,.busCard){position:relative;background:linear-gradient(135deg
   .tabbar .plus svg{width:24px;height:24px}
   .tabbar .plus svg{transition:transform .3s var(--ease)}
   body.capOpen .tabbar .plus svg{transform:rotate(45deg)}
-  .view.iaV{padding:4px 12px calc(88px + var(--safeB))}
+  .view.iaV{padding:4px 18px calc(88px + var(--safeB))}
   .chatList .msg{max-width:92%}
 }
 

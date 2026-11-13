@@ -441,7 +441,7 @@ function buildNav() {
     const b = el('button', '', `${ICON[k]}<span>${label}</span><span class="badge" data-badge="${k}" hidden></span>`);
     b.dataset.k = k; b.setAttribute('aria-label', label); b.onclick = () => go(k); side.appendChild(b);
   });
-  ['aujourdhui', 'taches', '+', 'devoirs', 'agenda', 'bus'].forEach(k => {
+  ['aujourdhui', 'taches', 'devoirs', '+', 'agenda', 'bus', 'ia'].forEach(k => {
     if (k === '+') { const p = el('button', 'plus', ICON.plus); p.setAttribute('aria-label', 'Ajouter'); p.onclick = () => toggleCapture(); bar.appendChild(p); return; }
     const label = TABS.find(t => t[0] === k)[1];
     const b = el('button', '', `${ICON[k]}<span>${label}</span>`); b.dataset.k = k; b.setAttribute('aria-label', label); b.onclick = () => go(k); bar.appendChild(b);
@@ -1762,5 +1762,7 @@ function boot() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
   addEventListener('online', () => pull()); addEventListener('offline', () => setOnline(false));
 }
+// Pas de zoom ni de défilement de toute la page sur téléphone (app installée)
+['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
 if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 boot();
