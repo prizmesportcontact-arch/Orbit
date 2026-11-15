@@ -331,6 +331,7 @@ Le message peut être :
 - une demande de FICHE de révision (ex : « fais-moi une fiche sur la forme canonique ») → intent "fiche" avec "study":{"subject":"matière ou null","topic":"sujet"} ;
 - une demande d'être INTERROGÉ ou de QUIZ (ex : « interroge-moi sur l'allemand », « quiz sur la Boétie ») → intent "quiz" avec "study":{"subject":"matière ou null","topic":"sujet ou null"} ;
 - une question de TRAJET, BUS ou TRANSPORT (ex : « je veux rentrer à 17h », « comment aller à la gare de Rambouillet samedi à 14h », « quel bus pour être au lycée avant 9h demain », « je suis chez un pote à Clairefontaine, comment je rentre ? ») → intent "trajet" avec "trip":{"from":"…","to":"…","datetime":"YYYY-MM-DDTHH:MM" ou null (null = maintenant),"represents":"departure" ou "arrival"}. Pour from/to, mets "maison" (là où il dort ce jour-là, l'app le sait), "lycee", "ici" (sa position GPS : seulement s'il dit « d'ici », « où je suis », « ma position », ou s'il ne dit pas d'où il part alors qu'il n'est visiblement pas chez lui), ou un lieu précis en texte avec la ville (ex : "Gare de Rambouillet", "Mairie, Clairefontaine-en-Yvelines", "Paris Montparnasse"). « rentrer » = vers "maison". « arriver avant/pour 9h » = represents "arrival". Sans heure ni lieu de départ précisés pour « rentrer » après les cours, part du "lycee" à la fin de ses cours. Laisse "reply" vide ;
+- une question sur le CAHIER DE TEXTES / ce qui a été fait en cours (ex : « est-ce que le chapitre sur les vecteurs est sur Pronote ? », « on a vu quoi en maths cette semaine ? », « le prof a mis le cours sur la Boétie ? », « quand est-ce qu'on a commencé les suites ? ») → intent "chat". Réponds UNIQUEMENT à partir de la section CAHIER DE TEXTES fournie (index + séances trouvées) : dis clairement OUI avec la matière, la ou les dates et ce qui est écrit (et s'il y a des fichiers joints), ou NON si rien ne correspond, en précisant que tu as cherché dans tout le cahier de textes depuis la rentrée et en proposant le chapitre le plus proche s'il y en a un. N'invente jamais un contenu absent ;
 - une demande de MODIFIER, DÉCALER ou SUPPRIMER (ex : « décale tout à demain », « mets le dentiste à 17h », « supprime le rappel poubelles », « renomme X ») → intent "edit" : "edits" liste les changements [{"id":"…","due":"YYYY-MM-DD","time":"HH:MM"|null,"title":"…"}] (ne mets que les champs qui changent ; "time":null enlève l'heure) et "remove" les id à supprimer. « tout » = toutes les tâches concernées de la liste ci-dessous. Les devoirs Pronote (id qui commence par pn:) et les révisions (rv:) ne peuvent être ni décalés ni supprimés : dis-le dans "reply" et propose de les marquer faits.
 Pour "chat", "reply" est une VRAIE réponse complète et utile, pas une phrase d'introduction : par exemple pour « organise ma semaine », donne le plan jour par jour (lundi, mardi…) en t'appuyant sur ses cours, devoirs, tâches et agenda ci-dessous, avec des créneaux concrets (ex : « 17h30-18h15 : exo de maths ») et les priorités. Mets en forme pour un téléphone : phrases courtes, un petit titre par jour ou par partie (ex : « Lundi : » seul sur sa ligne), des tirets « - » pour les listes, **gras** pour l'essentiel (matière, priorité), horaires au format 17h30-18h15. Pas de tableau, pas de #. Pour "add", "done" et "edit", "reply" est une phrase courte qui dit ce que tu as fait.
 Style de "reply" : commence directement par l'info ou le plan, sans phrase d'intro (« Voici… », « Bien sûr ! », « Super question »). Pas de formule de fin (« N'hésite pas… », « Bon courage ! », « En résumé »), pas d'emoji, pas de tournure « ce n'est pas X, c'est Y », pas de listes de trois adjectifs. Donne des faits vérifiables : heure, matière, durée estimée, date. Une question de relance au maximum, seulement si elle est utile.
@@ -343,7 +344,7 @@ function taskFrom(x, source) {
   return t;
 }
 async function agent(text, history = []) {
-  const r = await aiJSON({ system: AGENT_RULES + '\n\n' + snapshotCtx() + busCtx(), messages: [...history.slice(-10), { role: 'user', content: text }] });
+  const r = await aiJSON({ system: AGENT_RULES + '\n\n' + snapshotCtx(text) + busCtx(), messages: [...history.slice(-10), { role: 'user', content: text }] });
   return { intent: r.intent || (r.tasks?.length ? 'add' : 'chat'), reply: String(r.reply || ''), tasks: Array.isArray(r.tasks) ? r.tasks.filter(x => x && x.title) : [], done: Array.isArray(r.done) ? r.done : [], edits: Array.isArray(r.edits) ? r.edits.filter(x => x && x.id) : [], remove: Array.isArray(r.remove) ? r.remove.map(String) : [], study: r.study && typeof r.study === 'object' ? r.study : {}, trip: r.trip && typeof r.trip === 'object' ? r.trip : null };
 }
 // Applique les modifications demandées à l'IA ; renvoie un résumé lisible.
@@ -984,9 +985,26 @@ function openContenu(id) {
   $('#cAsk').onclick = () => { closeSheet(); go('ia'); ask(`Aide-moi à réviser ce cours de ${prettySubj(x.subject)} du ${new Date(x.start).toLocaleDateString('fr-FR')} : ${x.items.map(i => [i.title, i.text].filter(Boolean).join(' — ')).join(' / ')}. Explique l'essentiel simplement puis pose-moi 3 questions.`); };
 }
 document.addEventListener('click', e => { const it = e.target.closest('.item.cours[data-ck], .gBlk[data-ck]'); if (it && !e.target.closest('[data-act]')) openContenu(it.dataset.ck); });
-function contenusCtx() {
-  if (!contenus.length) return '';
-  return '\n\nCONTENU DES DERNIERS COURS (cahier de textes) : ' + contenus.slice(0, 12).map(x => `${prettySubj(x.subject)} le ${x.start.slice(0, 10)} : ${x.items.map(i => [i.title, i.text].filter(Boolean).join(' — ')).join(' / ').replace(/\s+/g, ' ').slice(0, 220)}`).join(' ; ');
+// Cahier de textes : recherche par mots-clés + index compact de tout ce qui est sur Pronote depuis la rentrée
+const nrm = x => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const STOP = new Set('alors avec avoir dans dans elle est-ce etait etre faire fait leur mais meme mettre moins nous pour pronote quand quel quelle quels quoi sont sous cours chapitre chapitres cette semaine prof professeur cahier texte textes est-ce deja aussi tout tous toute avez avons vous elles ils peux peut faut veux voudrais dire mets aide aider verifier regarde regarder dedans sur'.split(' '));
+function cahierFind(q, max = 8) {
+  const words = nrm(q).split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !STOP.has(w)).map(w => w.replace(/s$/, ''));
+  if (!words.length) return [];
+  return contenus.map(x => {
+    const subj = nrm(prettySubj(x.subject) + ' ' + x.subject), title = nrm(x.items.map(i => i.title).join(' ')), body = nrm(x.items.map(i => i.text + ' ' + (i.files || []).map(f => f.name).join(' ')).join(' '));
+    let sc = 0; for (const w of words) { if (title.includes(w)) sc += 4; if (body.includes(w)) sc += 2; if (subj.includes(w)) sc += 1; }
+    return { x, sc };
+  }).filter(o => o.sc >= 2).sort((a, b) => b.sc - a.sc || b.x.start.localeCompare(a.x.start)).slice(0, max).map(o => o.x);
+}
+const cahierLine = x => `${prettySubj(x.subject)} le ${x.start.slice(0, 10)}`;
+function contenusCtx(q = '') {
+  if (!contenus.length) return '\n\nCAHIER DE TEXTES : vide ou pas encore synchronisé.';
+  const from = contenus.at(-1).start.slice(0, 10);
+  const idx = contenus.map(x => `${cahierLine(x)} : ${x.items.map(i => i.title || i.text.replace(/\s+/g, ' ').slice(0, 70)).join(' / ')}${x.items.some(i => i.files?.length) ? ' [fichiers]' : ''}`).join('\n').slice(0, 9000);
+  const hits = q ? cahierFind(q, 6) : contenus.slice(0, 4);
+  const full = hits.map(x => `### ${cahierLine(x)}${x.teachers ? ' (' + x.teachers + ')' : ''}\n${x.items.map(i => `${i.cat ? '[' + i.cat + '] ' : ''}${i.title ? i.title + ' : ' : ''}${i.text.replace(/\s+/g, ' ').slice(0, 900)}${i.files?.length ? ' — fichiers : ' + i.files.map(f => f.name).join(', ') : ''}`).join('\n')}`).join('\n').slice(0, 7000);
+  return `\n\nCAHIER DE TEXTES PRONOTE (${contenus.length} séances, du ${from} à aujourd'hui).\nINDEX (une ligne par séance) :\n${idx}\n${q ? (hits.length ? 'SÉANCES QUI CORRESPONDENT À LA QUESTION (texte complet) :\n' + full : 'AUCUNE SÉANCE NE CONTIENT LES MOTS DE LA QUESTION (vérifie quand même l\'index pour un synonyme).') : 'DERNIÈRES SÉANCES :\n' + full}`;
 }
 
 /* ---------- Mode focus (Pomodoro) ---------- */
@@ -1277,7 +1295,7 @@ function rAI(force) {
   paintImgs(); paintChat(); loadFiches();
   if (!matchMedia('(max-width:699px)').matches) inp.focus();
 }
-function snapshotCtx() {
+function snapshotCtx(q = '') {
   const A = active().sort(byDue).slice(0, 60).map(t => `- [${t.id}] ${t.title}${t.kind === 'devoir' ? ' (devoir ' + (t.subject || '') + ')' : ''}${t.due ? ' — pour le ' + t.due + (t.time ? ' ' + t.time : '') : ''}${t.repeat ? ' — répétition ' + t.repeat : ''}`).join('\n');
   const days = Array.from({ length: 8 }, (_, i) => addDays(startOfDay(new Date()), i));
   const W = days.map(d => {
@@ -1288,7 +1306,7 @@ function snapshotCtx() {
   }).join('\n');
   const nowS = daySchedule(new Date()), cur = nowS.find(x => x.start <= new Date() && new Date() < x.end), nx = nowS.find(x => x.start > new Date());
   const pos = cur ? `En ce moment : ${cur.title} jusqu'à ${fmtTime(cur.end)}.` : nx ? `Prochain : ${nx.title} à ${fmtTime(nx.start)}.` : 'Plus de cours aujourd\'hui.';
-  return `${todayCtx()} ${pos}${notesCtx()}${contenusCtx()}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
+  return `${todayCtx()} ${pos}${notesCtx()}${contenusCtx(q)}\nTÂCHES ET DEVOIRS ACTIFS (avec leur date limite) :\n${A || '(aucun)'}\n\nEMPLOI DU TEMPS ET AGENDA DES 8 PROCHAINS JOURS :\n${W}`;
 }
 let asking = false;
 
@@ -1347,8 +1365,8 @@ async function studyCall(body) {
   return r.text;
 }
 const parseJSON = t => { try { return JSON.parse(t); } catch { const m = String(t).match(/\{[\s\S]*\}/); return m ? JSON.parse(m[0]) : null; } };
-function studyCtx(subject) {
-  const sub = (subject || '').toLowerCase(); const C = contenus.filter(x => !sub || (prettySubj(x.subject) || '').toLowerCase().includes(sub) || sub.includes((prettySubj(x.subject) || '').toLowerCase()));
+function studyCtx(subject, q = '') {
+  const sub = (subject || '').toLowerCase(); const hit = q ? cahierFind(q, 6) : []; const C = hit.length ? hit : contenus.filter(x => !sub || (prettySubj(x.subject) || '').toLowerCase().includes(sub) || sub.includes((prettySubj(x.subject) || '').toLowerCase()));
   const parts = [];
   if (C.length) parts.push('Cahier de textes : ' + C.slice(0, 10).map(x => `${prettySubj(x.subject)} (${x.start.slice(0, 10)}) : ${x.items.map(i => [i.title, i.text].filter(Boolean).join(' — ')).join(' / ')}`).join(' ; '));
   const D = uniqueDevoirs().filter(d => !sub || (prettySubj(d.subject) || '').toLowerCase().includes(sub)).slice(0, 8);
@@ -1495,7 +1513,7 @@ async function ask(q, pre = null) {
     const hist = () => chat.filter(m => !m.err).slice(-14).map(m => ({ role: m.role, content: m.content }));
     const a = pre || (imgs.length || COURS_RE.test(q.trim()) ? { intent: 'cours' } : await withTimeout(agent(q, chat.slice(0, -1).filter(m => !m.err)), 55000));
     if (a.intent === 'cours') {
-      const text = await studyCall({ mode: 'chat', messages: hist(), images: imgs, context: studyCtx('') });
+      const text = await studyCall({ mode: 'chat', messages: hist(), images: imgs, context: studyCtx('', q) });
       chat.push({ role: 'assistant', content: text, rich: true });
       return;
     }

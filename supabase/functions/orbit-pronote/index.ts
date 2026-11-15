@@ -129,16 +129,17 @@ Deno.serve(async (req) => {
       trace.push("emploi du temps : " + String((e as Error)?.message ?? e).slice(0, 120));
     }
 
-    // Contenu des cours (cahier de textes) des 3 dernières semaines. Une panne ici ne bloque rien.
+    // Contenu des cours (cahier de textes) depuis la rentrée (1er septembre). Une panne ici ne bloque rien.
     let contenus = 0;
     try {
-      const res = await pronote.resourcesFromIntervals(session, new Date(now.getTime() - 21 * 864e5), new Date(now.getTime() + 864e5));
+      const rentree = new Date(Date.UTC(now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1, 8, 1));
+      const res = await pronote.resourcesFromIntervals(session, rentree, new Date(now.getTime() + 864e5));
       const CAT: Record<number, string> = { 1: "Cours", 2: "Correction", 3: "Devoir sur table", 4: "Interrogation orale", 5: "Travaux dirigés", 6: "Travaux pratiques", 7: "Évaluation de compétences", 8: "EPI", 9: "AP" };
       const list = [];
       for (const r of res as any[]) {
         const start = parisWall(new Date(r.startDate)), end = parisWall(new Date(r.endDate));
         const items = (r.contents ?? []).map((c: any) => ({
-          title: clean(c.title ?? "").slice(0, 200), text: clean(c.description ?? "").slice(0, 2500),
+          title: clean(c.title ?? "").slice(0, 200), text: clean(c.description ?? "").slice(0, 1500),
           cat: c.categoryText || CAT[c.category] || "",
           files: (c.files ?? []).filter((f: any) => f?.url).slice(0, 6).map((f: any) => ({ name: String(f.name ?? "Fichier").slice(0, 120), url: String(f.url) })),
         })).filter((c: any) => c.title || c.text || c.files.length);
@@ -146,7 +147,7 @@ Deno.serve(async (req) => {
         list.push({ id: "c" + (await sha(`${r.subject?.name}|${start.toISOString()}`)).slice(0, 20), subject: r.subject?.name ?? null, start: start.toISOString(), end: end.toISOString(), teachers: (r.teachers ?? []).join(", "), items });
       }
       list.sort((a: any, b: any) => b.start.localeCompare(a.start));
-      await db.from("orbit_kv").upsert({ key: KV("contenus"), value: list.slice(0, 80), updated_at: now.toISOString() });
+      await db.from("orbit_kv").upsert({ key: KV("contenus"), value: list.slice(0, 400), updated_at: now.toISOString() });
       contenus = list.length;
     } catch (e) {
       trace.push("contenus : " + String((e as Error)?.message ?? e).slice(0, 120));
