@@ -1360,7 +1360,7 @@ let stImgs = [];
 let fiches = store.get('orbit.fiches', []);
 async function loadFiches() { try { const r = await extra('fiches'); if (Array.isArray(r.fiches)) { const ch = JSON.stringify(r.fiches) !== JSON.stringify(fiches); fiches = r.fiches; store.set('orbit.fiches', fiches); if (ch && current === 'ia' && !chat.length && !asking) paintChat(false); } } catch { } }
 async function studyCall(body) {
-  const r = await withTimeout(extra('study', body), body.mode === 'chat' ? 70000 : 125000);
+  const r = await withTimeout(extra('study', body), body.mode === 'chat' ? 110000 : 150000);
   if (!r.ok) { const e = new Error(r.error || 'erreur'); e.code = r.error === 'no_key' ? 'no_key' : /rate|429|limit/i.test(r.error || '') ? 'rate_limited' : ''; throw e; }
   return r.text;
 }

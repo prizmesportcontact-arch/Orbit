@@ -65,7 +65,7 @@ async function transcribe(cfg: any, b: any) {
   }
   if (cfg.gemini_key) {
     const body = { contents: [{ role: "user", parts: [{ text: "Transcris exactement ce message vocal en français. Réponds uniquement avec le texte." }, { inline_data: { mime_type: mime, data: b64 } }] }] };
-    for (const model of ["gemini-flash-latest", "gemini-2.5-flash"]) {
+    for (const model of await geminiModels(cfg.gemini_key)) {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gemini_key }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
       const j = await r.json().catch(() => ({}));
       if (r.ok) return { ok: true, text: (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim() };
@@ -96,6 +96,22 @@ Fais un QUIZ de révision de 8 questions à choix multiples, de difficulté prog
 "bonne" = index (0-3) de la bonne réponse. Une seule bonne réponse, des pièges plausibles. Tu peux utiliser $LaTeX$.
 AVANT de répondre, vérifie chaque question : la bonne réponse doit être certaine et conforme au programme du lycée. Si tu as le moindre doute sur une question, remplace-la par une autre plus sûre.`;
 
+// Google retire régulièrement des modèles : on demande la liste à Google, on garde les « flash » les plus récents (mémorisés 24 h)
+async function geminiModels(key: string): Promise<string[]> {
+  const { data: kv } = await db.from("orbit_kv").select("value, updated_at").eq("key", "gemini_model").maybeSingle();
+  if (kv?.value?.models?.length && Date.now() - new Date(kv.updated_at).getTime() < 24 * 3600e3) return kv.value.models;
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: { "x-goog-api-key": key }, signal: AbortSignal.timeout(10000) });
+    const j = await r.json();
+    const ver = (n: string) => +(n.match(/gemini-(\d+(?:\.\d+)?)/)?.[1] ?? 0);
+    const models = (j.models ?? []).filter((m: any) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
+      .map((m: any) => String(m.name).replace(/^models\//, "")).filter((n: string) => /^gemini-[\d.]+-flash$|^gemini-flash-latest$/.test(n))
+      .sort((a: string, b: string) => ver(b) - ver(a)).slice(0, 4);
+    if (models.length) { await db.from("orbit_kv").upsert({ key: "gemini_model", value: { models }, updated_at: new Date().toISOString() }); return models; }
+  } catch { /* liste indisponible */ }
+  return ["gemini-flash-latest"];
+}
+
 async function study(cfg: any, b: any) {
   const mode = ["fiche", "quiz"].includes(b.mode) ? b.mode : "chat";
   const system = (mode === "fiche" ? FICHE : mode === "quiz" ? QUIZ : TUTOR) + (b.context ? "\n\nCONTEXTE (cours de l'élève, cahier de textes, notes) :\n" + String(b.context).slice(0, 12000) : "");
@@ -106,24 +122,28 @@ async function study(cfg: any, b: any) {
   let err = "";
   // Photo → Gemini (vision). Sinon Groq gpt-oss-120b avec raisonnement, Gemini en secours.
   if (!images.length && cfg.groq_key) {
-    for (const model of ["openai/gpt-oss-120b", "moonshotai/kimi-k2-instruct", "llama-3.3-70b-versatile"]) {
+    const t0 = Date.now(), budget = json ? 95000 : 45000; // laisser du temps au secours Gemini
+    for (const model of ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"]) {
+      const left = budget - (Date.now() - t0); if (left < 8000) break;
       try {
         const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.groq_key}` },
           body: JSON.stringify({ model, messages: [{ role: "system", content: system }, ...messages], temperature: json ? 0.3 : 0.5, max_completion_tokens: 5000,
             ...(model.includes("gpt-oss") ? { reasoning_effort: "medium" } : {}), ...(json ? { response_format: { type: "json_object" } } : {}) }),
-          signal: AbortSignal.timeout(json ? 85000 : 55000),
+          signal: AbortSignal.timeout(Math.min(left, json ? 85000 : 35000)),
         });
         const j = await r.json().catch(() => ({}));
         if (r.ok) { const text = j.choices?.[0]?.message?.content ?? ""; if (text.trim()) return { ok: true, text, model }; }
-        err = j.error?.message ?? `Groq ${r.status}`;
+        err = "Groq : " + String(j.error?.message ?? r.status).slice(0, 160);
         if (r.status === 401) break;
-      } catch { err = "Groq met trop de temps"; }
+      } catch { err = "Groq : met trop de temps"; }
     }
   }
   if (cfg.gemini_key) {
     const contents = messages.map((m: any, i: number) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }, ...(i === messages.length - 1 ? images.map((im: any) => ({ inline_data: { mime_type: im.mime, data: im.data } })) : [])] }));
-    for (const model of ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
+    const queue = await geminiModels(cfg.gemini_key), tried = new Set<string>(); let gErr = "";
+    while (queue.length) {
+      const model = queue.shift()!; if (tried.has(model)) continue; tried.add(model);
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gemini_key },
@@ -131,10 +151,16 @@ async function study(cfg: any, b: any) {
           signal: AbortSignal.timeout(50000),
         });
         const j = await r.json().catch(() => ({}));
-        if (r.ok) return { ok: true, text: (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join(""), model };
-        err = "Gemini " + (j.error?.message ?? r.status);
-      } catch { err = "Gemini met trop de temps"; }
+        if (r.ok) {
+          if (tried.size > 1) await db.from("orbit_kv").upsert({ key: "gemini_model", value: { models: [model, ...(await geminiModels(cfg.gemini_key)).filter((m) => m !== model)] }, updated_at: new Date().toISOString() });
+          return { ok: true, text: (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join(""), model };
+        }
+        gErr = String(j.error?.message ?? r.status);
+        const hint = gErr.match(/use models\/([\w.-]+)/i)?.[1]; if (hint && !tried.has(hint)) queue.unshift(hint);
+        if (/no longer available|not found|is not supported/i.test(gErr)) await db.from("orbit_kv").delete().eq("key", "gemini_model");
+      } catch { gErr = "met trop de temps"; }
     }
+    err = (err ? err + " | " : "") + "Gemini : " + gErr.slice(0, 160);
   }
   return { ok: false, error: err || "no_key" };
 }
