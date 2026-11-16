@@ -110,7 +110,9 @@ async function plan(cfg: any, now: Date, today: string, tomorrow: string, log: s
     const s = new Date(c.starts_at);
     if (s.getTime() - now.getTime() > 3 * 864e5) continue;
     const when = ymd(s) === today ? "aujourd'hui" : ymd(s) === tomorrow ? "demain" : shortDay(s);
-    rows.push({ id: P("x:" + c.id), source: "cours", at: now.toISOString(), title: `🚫 ${subj(c.subject)} annulé ${when} (${hm(s)})`, body: [c.status && !/^annul/i.test(c.status) ? c.status : "", c.teacher ? "Prof : " + c.teacher : "", `${hm(c.starts_at)} – ${hm(c.ends_at)} → temps libre`].filter(Boolean).join("\n") });
+    // Identifiant stable : Pronote change l'id des cours à chaque synchro, sinon l'alerte repart toutes les 30 min
+    const xid = P("x:" + String(c.subject ?? "cours").toLowerCase().replace(/[^a-z0-9]+/g, "-") + "@" + s.toISOString());
+    rows.push({ id: xid, source: "cours", at: now.toISOString(), title: `🚫 ${subj(c.subject)} annulé ${when} (${hm(s)})`, body: [c.status && !/^annul/i.test(c.status) ? c.status : "", c.teacher ? "Prof : " + c.teacher : "", `${hm(c.starts_at)} – ${hm(c.ends_at)} → temps libre`].filter(Boolean).join("\n") });
   }
 
   // 5. Briefing du matin (7h, une fois par jour)
